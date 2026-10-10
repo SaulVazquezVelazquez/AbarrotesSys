@@ -27,7 +27,6 @@
         <span class="modal-close" onclick="closeModal('modalPago')">&times;</span>
         <h3>Registrar abono</h3>
         <form id="formPago" onsubmit="return false;">
-            <input type="hidden" name="id_intento" value="<?= esc($intento_preseleccionado ?? '') ?>">
             <div class="form-group">
                 <label>Cliente</label>
                 <select name="id_cliente" class="admin-select" style="width:100%;" required>
@@ -68,7 +67,5 @@ document.getElementById('formPago').addEventListener('submit', async function ()
     if (r.respuesta) setTimeout(() => window.location.reload(), 900);
 });
 </script>
-
-<?php if (!empty($intento_preseleccionado)): ?><script>document.addEventListener('DOMContentLoaded', () => openModal('modalPago'));</script><?php endif; ?>
 
 <?= $this->include('admin/layout_footer') ?>

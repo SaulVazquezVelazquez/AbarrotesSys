@@ -1,5 +1,5 @@
 -- Datos de demostración para el catálogo de Tienda y Abarrotes.
--- Ejecutar después de credito_facil_schema.sql y tienda_barrio.sql.
+-- Ejecutar después de tienda_abarrotes_schema.sql y tienda_barrio.sql.
 -- Se omiten códigos de barras ya existentes para permitir ejecutar el script más de una vez.
 
 INSERT INTO productos

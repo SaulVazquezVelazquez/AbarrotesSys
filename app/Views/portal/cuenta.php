@@ -16,34 +16,15 @@
         </div>
 
         <div class="portal-card saldo-hero">
-            <p style="color:var(--gris-texto); margin-bottom:4px;">Saldo actual</p>
+            <p style="color:var(--gris-texto); margin-bottom:4px;">Saldo de tu cuenta</p>
             <div class="monto">$<?= number_format($cliente->saldo_actual, 2) ?></div>
             <p>
-                <span class="semaforo-dot dot-<?= strtolower($cliente->semaforo) ?>"></span>
-                <?= $cliente->semaforo === 'VERDE' ? 'Estás al día' : ($cliente->semaforo === 'AMARILLO' ? 'Tu pago está por vencer' : 'Tienes un pago vencido o tu cuenta está bloqueada') ?>
+                <?= (float) $cliente->saldo_actual <= 0 ? 'No tienes saldo pendiente' : 'Tienes saldo pendiente en tu cuenta' ?>
             </p>
             <p style="font-size:13px; color:var(--gris-texto);">Crédito disponible: $<?= number_format($cliente->credito_disponible, 2) ?> de $<?= number_format($cliente->limite_credito, 2) ?></p>
             <?php if ($cliente->proxima_fecha_limite): ?>
                 <p style="font-size:13px; color:var(--gris-texto);">Próxima fecha de pago: <?= esc($cliente->proxima_fecha_limite) ?></p>
             <?php endif; ?>
-        </div>
-
-        <div class="portal-card">
-            <h3>Registrar intención de pago</h3>
-            <p style="color:var(--gris-texto); font-size:13px;">Avísale a la tienda que vas a pagar; ellos confirman el abono cuando lo reciban.</p>
-            <form id="formIntento" onsubmit="return false;">
-                <div class="form-group"><label>Monto que vas a pagar</label><input type="number" step="0.01" name="monto" required></div>
-                <div class="form-group">
-                    <label>Método</label>
-                    <select name="metodo_pago" class="admin-select" style="width:100%;">
-                        <option value="EFECTIVO">Efectivo (en tienda)</option>
-                        <option value="TRANSFERENCIA">Transferencia</option>
-                        <option value="SPEI">SPEI</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn btn-primary btn-full">Avisar a la tienda</button>
-                <p id="mensajeIntento" class="form-mensaje"></p>
-            </form>
         </div>
 
         <div class="portal-card">
@@ -72,17 +53,5 @@
         </div>
     </div>
 
-    <script>
-    const BASE = '<?= base_url() ?>';
-    document.getElementById('formIntento').addEventListener('submit', async function () {
-        const body = new URLSearchParams(new FormData(document.getElementById('formIntento')));
-        const res = await fetch(BASE + 'portal/registrarIntentoPago', { method: 'POST', body });
-        const data = await res.json();
-        const msg = document.getElementById('mensajeIntento');
-        msg.textContent = data.mensaje;
-        msg.className = 'form-mensaje ' + (data.respuesta ? 'ok' : 'error');
-        if (data.respuesta) document.getElementById('formIntento').reset();
-    });
-    </script>
 </body>
 </html>

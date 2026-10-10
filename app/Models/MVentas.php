@@ -149,15 +149,6 @@ class MVentas extends Model
             }
         }
 
-        // Programa el recordatorio previo al vencimiento (usando DIAS_AVISO_AMARILLO)
-        $diasAviso = (int) ($this->db->query("SELECT valor FROM configuracion WHERE clave = 'DIAS_AVISO_AMARILLO'")->getRow()->valor ?? 3);
-        $fechaAviso = date('Y-m-d H:i:s', strtotime($fechaLimite . " -{$diasAviso} days"));
-        $this->db->query(
-            "INSERT INTO mensajes_cobranza (id_cliente, id_venta, tipo, canal, fecha_programada, estatus)
-             VALUES (?, ?, 'RECORDATORIO_PREVIO', 'WHATSAPP', ?, 'PENDIENTE')",
-            [$idCliente, $idVenta, $fechaAviso]
-        );
-
         $this->db->transComplete();
 
         if ($this->db->transStatus() === false) {

@@ -19,11 +19,11 @@ COPY composer.json composer.lock ./
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
 
 COPY . .
-COPY docker/credito-facil.conf /etc/apache2/sites-available/000-default.conf
-COPY docker/start.sh /usr/local/bin/credito-facil-start
-RUN chmod +x /usr/local/bin/credito-facil-start \
+COPY docker/tienda-abarrotes.conf /etc/apache2/sites-available/000-default.conf
+COPY docker/start.sh /usr/local/bin/tienda-abarrotes-start
+RUN chmod +x /usr/local/bin/tienda-abarrotes-start \
     && mkdir -p writable/cache writable/debugbar writable/logs writable/session writable/uploads/clientes writable/uploads/comprobantes public/assets/img/productos \
     && chown -R www-data:www-data writable public/assets/img/productos
 
 EXPOSE 10000
-CMD ["/usr/local/bin/credito-facil-start"]
+CMD ["/usr/local/bin/tienda-abarrotes-start"]

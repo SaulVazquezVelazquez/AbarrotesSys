@@ -117,7 +117,7 @@ a { color:inherit; text-decoration:none; }
     .kpi-grid { grid-template-columns:repeat(2,1fr); }
 }
 
-/* ---- Refresh visual: Crédito Fácil ---- */
+/* ---- Estilos de Tienda y Abarrotes ---- */
 :root {
     --negro:#f4f6fa; --negro-suave:#ffffff; --carbon:#ffffff; --hueso:#202b3c;
     --acento:#237a52; --acento-suave:#388b65; --cta:#ffbd45; --cta-suave:#ffd071;

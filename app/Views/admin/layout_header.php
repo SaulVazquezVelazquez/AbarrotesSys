@@ -37,7 +37,6 @@
             <a href="<?= base_url() ?>admin/productos"><i class="fa-solid fa-box"></i> Productos</a>
             <a href="<?= base_url() ?>admin/ventas"><i class="fa-solid fa-cash-register"></i> Ventas (POS)</a>
             <a href="<?= base_url() ?>admin/pagos"><i class="fa-solid fa-hand-holding-dollar"></i> Pagos / Abonos</a>
-            <a href="<?= base_url() ?>admin/cobranza"><i class="fa-solid fa-bell"></i> Cobranza</a>
             <a href="<?= base_url() ?>admin/reportes"><i class="fa-solid fa-chart-pie"></i> Reportes</a>
             <?php if (($rol ?? '') === 'DUENO'): ?>
                 <a href="<?= base_url() ?>admin/usuarios"><i class="fa-solid fa-user-shield"></i> Usuarios</a>

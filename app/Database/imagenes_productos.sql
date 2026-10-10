@@ -1,5 +1,5 @@
 -- Galería de imágenes para productos existentes.
--- Ejecutar una vez en instalaciones ya creadas con credito_facil_schema.sql.
+-- Ejecutar una vez después de tienda_abarrotes_schema.sql.
 CREATE TABLE IF NOT EXISTS producto_imagenes (
     id_imagen       SERIAL PRIMARY KEY,
     id_producto     INTEGER NOT NULL REFERENCES productos(id_producto) ON DELETE CASCADE,

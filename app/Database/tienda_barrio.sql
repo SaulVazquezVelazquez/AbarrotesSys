@@ -1,4 +1,4 @@
--- Ejecutar después de credito_facil_schema.sql; también funciona como migración idempotente para tienda_abarrotes.
+-- Ejecutar después de tienda_abarrotes_schema.sql; también migra instalaciones existentes.
 ALTER TABLE productos ADD COLUMN IF NOT EXISTS codigo_barras VARCHAR(32) UNIQUE;
 ALTER TABLE productos ADD COLUMN IF NOT EXISTS plu VARCHAR(8);
 ALTER TABLE productos ADD COLUMN IF NOT EXISTS departamento VARCHAR(20) NOT NULL DEFAULT 'ABARROTES';

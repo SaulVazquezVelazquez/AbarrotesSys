@@ -1,6 +1,6 @@
 -- =====================================================================
--- CRÉDITO FÁCIL - Incremental: Catálogo público + Solicitudes de compra
--- Ejecutar DESPUÉS de credito_facil_schema.sql
+-- Módulo de pedidos para recoger desde el catálogo público.
+-- Ejecutar DESPUÉS de tienda_abarrotes_schema.sql.
 -- =====================================================================
 
 -- Cabecera de la solicitud que cualquier visitante puede enviar desde el

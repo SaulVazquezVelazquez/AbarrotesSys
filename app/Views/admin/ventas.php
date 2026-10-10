@@ -68,7 +68,7 @@ async function avanzarPedido(id, estadoActual) {
         </div>
 
         <div id="infoCliente" style="display:none; padding:12px; background:var(--negro); border-radius:6px; margin-bottom:14px;">
-            <p><strong id="infoNombre"></strong> — Semáforo: <span id="infoSemaforo"></span></p>
+            <p><strong id="infoNombre"></strong></p>
             <p>Crédito disponible: <strong id="infoDisponible"></strong></p>
             <input type="hidden" id="v_id_cliente">
         </div>
@@ -151,7 +151,6 @@ function seleccionarCliente(c) {
     clienteSeleccionado = c;
     document.getElementById('infoCliente').style.display = 'block';
     document.getElementById('infoNombre').textContent = c.nombre_completo + ' — ' + c.telefono;
-    document.getElementById('infoSemaforo').innerHTML = '<span class="semaforo-dot dot-' + c.semaforo.toLowerCase() + '"></span>' + c.semaforo;
     document.getElementById('infoDisponible').textContent = '$' + Number(c.credito_disponible).toFixed(2);
     document.getElementById('resultadosCliente').innerHTML = '';
     document.getElementById('buscarCliente').value = c.nombre_completo;

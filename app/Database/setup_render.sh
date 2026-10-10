@@ -9,10 +9,10 @@ fi
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 for script in \
-  credito_facil_schema.sql \
-  credito_facil_solicitudes.sql \
-  credito_facil_imagenes_productos.sql \
-  credito_facil_mejoras_operativas.sql \
+  tienda_abarrotes_schema.sql \
+  pedidos_pickup.sql \
+  imagenes_productos.sql \
+  mejoras_operativas.sql \
   tienda_barrio.sql
 do
   echo "Aplicando ${script}..."

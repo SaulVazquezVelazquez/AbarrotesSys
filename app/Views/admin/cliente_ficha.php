@@ -1,7 +1,5 @@
 <?= $this->include('admin/layout_header') ?>
 
-<?php function dotSemaforo($s) { return '<span class="semaforo-dot dot-' . strtolower($s ?: 'verde') . '"></span>'; } ?>
-
 <?php $inicialesCliente = mb_strtoupper(mb_substr(trim($cliente->nombre_completo), 0, 1) . (mb_strpos(trim($cliente->nombre_completo), ' ') !== false ? mb_substr(trim($cliente->nombre_completo), mb_strpos(trim($cliente->nombre_completo), ' ') + 1, 1) : '')); ?>
 <section class="client-profile-banner">
     <div class="client-avatar client-avatar-lg"><?php if (!empty($cliente->foto)): ?><img src="<?= base_url('admin/clientes/' . $cliente->id_cliente . '/foto') ?>" alt="Foto de <?= esc($cliente->nombre_completo) ?>"><?php else: ?><?= esc($inicialesCliente) ?><?php endif; ?></div>
@@ -20,7 +18,6 @@
     <div class="kpi-card"><div class="kpi-label">Saldo actual</div><div class="kpi-value">$<?= number_format($cliente->saldo_actual, 2) ?></div></div>
     <div class="kpi-card"><div class="kpi-label">Límite de crédito</div><div class="kpi-value">$<?= number_format($cliente->limite_credito, 2) ?></div></div>
     <div class="kpi-card"><div class="kpi-label">Disponible</div><div class="kpi-value">$<?= number_format($cliente->credito_disponible, 2) ?></div></div>
-    <div class="kpi-card"><div class="kpi-label">Semáforo</div><div class="kpi-value"><?= dotSemaforo($cliente->semaforo) ?><?= esc($cliente->semaforo) ?></div></div>
 </div>
 
 <div class="chart-card client-timeline-card">
@@ -28,7 +25,7 @@
     <?php if (!empty($actividad)): ?>
         <div class="client-timeline">
             <?php foreach ($actividad as $evento): ?>
-                <?php $iconoActividad = ['VENTA'=>'fa-bag-shopping','PAGO'=>'fa-circle-check','PROMESA'=>'fa-calendar-check','GESTION'=>'fa-headset','SOLICITUD'=>'fa-inbox'][$evento->tipo] ?? 'fa-circle'; ?>
+                <?php $iconoActividad = ['VENTA'=>'fa-bag-shopping','PAGO'=>'fa-circle-check','SOLICITUD'=>'fa-inbox'][$evento->tipo] ?? 'fa-circle'; ?>
                 <article class="timeline-event">
                     <span class="timeline-icon timeline-<?= strtolower($evento->tipo) ?>"><i class="fa-solid <?= $iconoActividad ?>"></i></span>
                     <div class="timeline-copy"><div class="timeline-title-row"><strong><?= esc($evento->titulo) ?></strong><span class="badge badge-<?= strtolower($evento->estatus) ?>"><?= esc($evento->estatus) ?></span></div><p><?= esc($evento->detalle) ?></p><time><?= esc(date('d/m/Y · H:i', strtotime($evento->fecha))) ?></time></div>
@@ -37,24 +34,6 @@
             <?php endforeach; ?>
         </div>
     <?php else: ?><p class="empty-state">Aún no hay actividad registrada para este cliente.</p><?php endif; ?>
-</div>
-
-<?php if ($scoring && $scoring->porcentaje_puntualidad !== null): ?>
-<div class="chart-card">
-    <h2>Comportamiento de pago</h2>
-    <p>Puntualidad histórica: <strong><?= esc($scoring->porcentaje_puntualidad) ?>%</strong> (<?= esc($scoring->ventas_pagadas) ?> pagadas a tiempo, <?= esc($scoring->ventas_vencidas) ?> vencidas)</p>
-</div>
-<?php endif; ?>
-
-<div class="chart-card">
-    <h2>Contactos de referencia / avales</h2>
-    <ul>
-        <?php foreach ($contactos as $c): ?>
-            <li><?= esc($c->nombre) ?> — <?= esc($c->telefono) ?> (<?= esc($c->relacion) ?>)</li>
-        <?php endforeach; ?>
-        <?php if (empty($contactos)): ?><li style="list-style:none; color:var(--gris-texto);">Sin contactos registrados.</li><?php endif; ?>
-    </ul>
-    <button class="btn btn-secondary btn-sm" onclick="openModal('modalContacto')">Agregar contacto</button>
 </div>
 
 <div class="chart-card">
@@ -126,22 +105,6 @@
     </div>
 </div>
 
-<!-- Modal: agregar contacto -->
-<div class="modal-overlay" id="modalContacto">
-    <div class="modal-box">
-        <span class="modal-close" onclick="closeModal('modalContacto')">&times;</span>
-        <h3>Agregar contacto de referencia</h3>
-        <form id="formContacto" onsubmit="return false;">
-            <input type="hidden" name="id_cliente" value="<?= esc($cliente->id_cliente) ?>">
-            <div class="form-group"><label>Nombre</label><input type="text" name="nombre" required></div>
-            <div class="form-group"><label>Teléfono</label><input type="text" name="telefono"></div>
-            <div class="form-group"><label>Relación</label><input type="text" name="relacion" placeholder="Ej. esposo, hermana, vecino"></div>
-            <button type="submit" class="btn btn-primary btn-full">Guardar contacto</button>
-            <p id="mensajeContacto" class="form-mensaje"></p>
-        </form>
-    </div>
-</div>
-
 <script>
 const BASE = '<?= base_url() ?>';
 const ID_CLIENTE = <?= esc($cliente->id_cliente) ?>;
@@ -171,13 +134,6 @@ document.getElementById('formBloquear').addEventListener('submit', async functio
     if (r.respuesta) setTimeout(() => window.location.reload(), 900);
 });
 
-document.getElementById('formContacto').addEventListener('submit', async function () {
-    const data = Object.fromEntries(new FormData(document.getElementById('formContacto')));
-    const r = await adminPost(BASE + 'admin/clientes/contacto/guardar', data);
-    document.getElementById('mensajeContacto').textContent = r.mensaje;
-    document.getElementById('mensajeContacto').className = 'form-mensaje ' + (r.respuesta ? 'ok' : 'error');
-    if (r.respuesta) setTimeout(() => window.location.reload(), 900);
-});
 </script>
 
 <?= $this->include('admin/layout_footer') ?>

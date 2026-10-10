@@ -35,7 +35,6 @@ $routes->get('portal', 'Portal::index');
 $routes->post('portal/entrar', 'Portal::entrar');
 $routes->get('portal/cuenta', 'Portal::cuenta');
 $routes->get('portal/logout', 'Portal::logout');
-$routes->post('portal/registrarIntentoPago', 'Portal::registrarIntentoPago');
 $routes->get('portal/comprobante/(:num)', 'Portal::descargarComprobante/$1');
 
 /*
@@ -80,7 +79,6 @@ $routes->group('admin', function ($routes) {
     $routes->post('clientes/guardar', 'AdminClientes::guardar');
     $routes->post('clientes/(:num)/bloquear', 'AdminClientes::bloquear/$1');
     $routes->post('clientes/(:num)/desbloquear', 'AdminClientes::desbloquear/$1');
-    $routes->post('clientes/contacto/guardar', 'AdminClientes::guardarContacto');
 
     // Productos
     $routes->get('productos', 'AdminProductos::index');
@@ -101,14 +99,6 @@ $routes->group('admin', function ($routes) {
     $routes->get('pagos', 'AdminPagos::index');
     $routes->post('pagos/guardar', 'AdminPagos::guardar');
     $routes->get('pagos/(:num)/comprobante', 'AdminPagos::comprobante/$1');
-
-    // Cobranza
-    $routes->get('cobranza', 'AdminCobranza::index');
-    $routes->post('cobranza/promesa/guardar', 'AdminCobranza::guardarPromesa');
-    $routes->post('cobranza/promesa/(:num)/actualizar', 'AdminCobranza::actualizarPromesa/$1');
-    $routes->post('cobranza/seguimiento/guardar', 'AdminCobranza::registrarSeguimiento');
-    $routes->post('cobranza/mensaje/enviar', 'AdminCobranza::enviarMensajeManual');
-    $routes->post('cobranza/mensaje/(:num)/marcarEnviado', 'AdminCobranza::marcarEnviado/$1');
 
     // Reportes
     $routes->get('reportes', 'AdminReportes::index');

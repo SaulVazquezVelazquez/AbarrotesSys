@@ -23,13 +23,11 @@ class AdminReportes extends BaseController
         $data['rol']                = $this->session->get('rol');
         $data['resumen']            = $this->Modelo->getResumenGeneral();
         $data['flujo_caja']         = $this->Modelo->getFlujoCaja(30);
-        $data['cartera_por_cobrar'] = $this->Modelo->getCarteraPorCobrar();
-        $data['aging']              = $this->Modelo->getResumenAging();
 
         return view('admin/reportes', $data);
     }
 
-    // Exporta la cartera actual a CSV (Excel la abre directamente)
+    // Exporta los saldos actuales de clientes a CSV (Excel los abre directamente).
     public function exportarCarteraCsv()
     {
         if ($check = $this->requireAdmin()) {
@@ -42,12 +40,12 @@ class AdminReportes extends BaseController
         $this->response->setHeader('Content-Disposition', 'attachment; filename="cartera_' . date('Y-m-d') . '.csv"');
 
         $output = fopen('php://temp', 'w');
-        fputcsv($output, ['Cliente', 'Teléfono', 'Saldo actual', 'Límite de crédito', 'Crédito disponible', 'Próxima fecha límite', 'Semáforo']);
+        fputcsv($output, ['Cliente', 'Teléfono', 'Saldo actual', 'Límite de crédito', 'Crédito disponible', 'Próxima fecha límite']);
 
         foreach ($filas as $f) {
             fputcsv($output, [
                 $f->nombre_completo, $f->telefono, $f->saldo_actual, $f->limite_credito,
-                $f->credito_disponible, $f->proxima_fecha_limite, $f->semaforo,
+                $f->credito_disponible, $f->proxima_fecha_limite,
             ]);
         }
 

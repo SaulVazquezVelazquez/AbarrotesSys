@@ -72,32 +72,6 @@ class Portal extends BaseController
         return redirect()->to(base_url());
     }
 
-    // Registra la intención de pago del cliente (no procesa el cobro real; eso
-    // requiere conectar una pasarela como Mercado Pago/SPEI con sus propias
-    // credenciales). Por ahora deja constancia para que el negocio le dé seguimiento.
-    public function registrarIntentoPago()
-    {
-        if (! $this->session->get('cliente_logueado')) {
-            return $this->jsonResponse(false, 'Tu sesión expiró, vuelve a entrar.');
-        }
-
-        $idCliente = $this->session->get('id_cliente');
-        $monto     = $this->request->getPost('monto');
-        $metodo    = $this->request->getPost('metodo_pago');
-
-        if (empty($monto) || $monto <= 0) {
-            return $this->jsonResponse(false, 'Indica un monto válido.');
-        }
-
-        $this->db->query(
-            "INSERT INTO mensajes_cobranza (id_cliente, tipo, canal, texto_final, monto_reportado, fecha_programada, estatus)
-             VALUES (?, 'INTENCION_PAGO', 'INTERNO', ?, ?, NOW(), 'PENDIENTE')",
-            [$idCliente, "El cliente indicó que realizará un pago vía {$metodo}.", $monto]
-        );
-
-        return $this->jsonResponse(true, '¡Gracias! Avisamos a la tienda de tu intención de pago, en breve lo confirman.');
-    }
-
     public function descargarComprobante($idPago)
     {
         if (! $this->session->get('cliente_logueado')) {

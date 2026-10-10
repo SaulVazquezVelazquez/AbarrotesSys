@@ -1,6 +1,6 @@
 # Tienda y Abarrotes — POS e inventario
 
-Sistema para tienda de abarrotes y verdulería basado en CodeIgniter 4, PostgreSQL y los patrones MVC del proyecto Crédito Fácil. Mantiene autenticación y roles, catálogo de productos/clientes y agrega punto de venta, cuentas en espera, inventario por pieza o fracción, compras por empaque, merma, cuentas de crédito, abonos y corte diario.
+Sistema independiente para una tienda de abarrotes y verdulería, construido con CodeIgniter 4 y PostgreSQL. Incluye autenticación y roles, catálogo de productos y clientes, punto de venta, cuentas en espera, inventario por pieza o fracción, compras por empaque, merma, fiado, abonos y corte diario.
 
 ## Instalación
 
@@ -9,10 +9,10 @@ Sistema para tienda de abarrotes y verdulería basado en CodeIgniter 4, PostgreS
 3. Inicia PostgreSQL en MAMP y confirma que escucha en `127.0.0.1:5432`. Copia `env.example` a `.env` si aún no lo hiciste y ajusta usuario/contraseña. El proyecto queda configurado para la base existente `tienda_abarrotes`. Para aplicar todos los scripts en orden, ejecuta `bash app/Database/setup_local.sh`. También puedes aplicar manualmente los siguientes scripts en `tienda_abarrotes`:
 
 ```sh
-psql "postgresql://postgres:root@127.0.0.1:5432/tienda_abarrotes" -f app/Database/credito_facil_schema.sql
-psql "postgresql://postgres:root@127.0.0.1:5432/tienda_abarrotes" -f app/Database/credito_facil_solicitudes.sql
-psql "postgresql://postgres:root@127.0.0.1:5432/tienda_abarrotes" -f app/Database/credito_facil_imagenes_productos.sql
-psql "postgresql://postgres:root@127.0.0.1:5432/tienda_abarrotes" -f app/Database/credito_facil_mejoras_operativas.sql
+psql "postgresql://postgres:root@127.0.0.1:5432/tienda_abarrotes" -f app/Database/tienda_abarrotes_schema.sql
+psql "postgresql://postgres:root@127.0.0.1:5432/tienda_abarrotes" -f app/Database/pedidos_pickup.sql
+psql "postgresql://postgres:root@127.0.0.1:5432/tienda_abarrotes" -f app/Database/imagenes_productos.sql
+psql "postgresql://postgres:root@127.0.0.1:5432/tienda_abarrotes" -f app/Database/mejoras_operativas.sql
 psql "postgresql://postgres:root@127.0.0.1:5432/tienda_abarrotes" -f app/Database/tienda_barrio.sql
 ```
 

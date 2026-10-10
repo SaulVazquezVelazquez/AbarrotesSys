@@ -30,7 +30,6 @@ class AdminPagos extends BaseController
         $data['clientes']        = $this->ModeloClientes->getTodosConSaldo();
         $data['cliente_preseleccionado'] = $this->request->getGet('cliente');
         $data['monto_preseleccionado'] = $this->request->getGet('monto');
-        $data['intento_preseleccionado'] = $this->request->getGet('intento');
 
         return view('admin/pagos', $data);
     }
@@ -46,7 +45,6 @@ class AdminPagos extends BaseController
         $monto      = $this->request->getPost('monto');
         $metodoPago = $this->request->getPost('metodo_pago') ?: 'EFECTIVO';
         $referencia = $this->request->getPost('referencia_pago');
-        $idIntento = $this->request->getPost('id_intento');
 
         if (empty($idCliente) || empty($monto) || $monto <= 0) {
             return $this->jsonResponse(false, 'Selecciona un cliente e indica un monto válido.');
@@ -62,11 +60,6 @@ class AdminPagos extends BaseController
         );
 
         if ($ok) {
-            if ($idIntento) {
-                $this->db->table('mensajes_cobranza')->where('id_mensaje', (int) $idIntento)
-                    ->where('id_cliente', (int) $idCliente)->where('tipo', 'INTENCION_PAGO')
-                    ->where('estatus', 'PENDIENTE')->update(['estatus' => 'ENVIADO', 'fecha_envio' => date('Y-m-d H:i:s')]);
-            }
             $this->registrarAuditoria('REGISTRAR_ABONO', 'pagos_abonos', $idPago, 'Cliente #' . $idCliente . ' - $' . $monto);
             $rutaPdf = $this->generarComprobante($idPago, $idCliente, $monto, $metodoPago, $referencia);
             if ($rutaPdf) {

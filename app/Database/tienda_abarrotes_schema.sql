@@ -1,5 +1,5 @@
 -- =====================================================================
--- CRÉDITO FÁCIL - Sistema de ventas a crédito ("fiado") para micronegocio
+-- Esquema base de Tienda y Abarrotes, incluyendo fiado y cuentas de clientes.
 -- PostgreSQL
 -- =====================================================================
 -- Ejecutar primero (conectado a la BD "postgres"):
@@ -42,15 +42,6 @@ CREATE TABLE IF NOT EXISTS clientes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_clientes_telefono ON clientes(telefono);
-
--- Contactos de referencia / avales (opcional para montos mayores)
-CREATE TABLE IF NOT EXISTS contactos_referencia (
-    id_contacto  SERIAL PRIMARY KEY,
-    id_cliente   INTEGER NOT NULL REFERENCES clientes(id_cliente) ON DELETE CASCADE,
-    nombre       VARCHAR(150) NOT NULL,
-    telefono     VARCHAR(30),
-    relacion     VARCHAR(80)
-);
 
 -- ---------------------------------------------------------------------
 -- PRODUCTOS (catálogo con imagen)
@@ -134,58 +125,6 @@ CREATE INDEX IF NOT EXISTS idx_pagos_cliente ON pagos_abonos(id_cliente);
 CREATE INDEX IF NOT EXISTS idx_pagos_venta ON pagos_abonos(id_venta);
 
 -- ---------------------------------------------------------------------
--- COBRANZA: promesas de pago + plantillas/mensajes
--- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS promesas_pago (
-    id_promesa       SERIAL PRIMARY KEY,
-    id_cliente       INTEGER NOT NULL REFERENCES clientes(id_cliente),
-    id_venta         INTEGER REFERENCES ventas(id_venta),
-    monto_prometido  NUMERIC(10,2) NOT NULL,
-    fecha_prometida  DATE NOT NULL,
-    estatus          VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE', -- PENDIENTE | CUMPLIDA | INCUMPLIDA
-    notas            VARCHAR(255),
-    fecha_creacion   TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS seguimientos_cobranza (
-    id_seguimiento   SERIAL PRIMARY KEY,
-    id_cliente       INTEGER NOT NULL REFERENCES clientes(id_cliente) ON DELETE CASCADE,
-    id_venta         INTEGER REFERENCES ventas(id_venta),
-    id_usuario       INTEGER REFERENCES usuarios(id_usuario),
-    resultado        VARCHAR(30) NOT NULL,
-    detalle          TEXT,
-    proxima_fecha    DATE,
-    fecha_creacion   TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_seguimientos_cliente_fecha
-    ON seguimientos_cobranza(id_cliente, fecha_creacion DESC);
-CREATE INDEX IF NOT EXISTS idx_seguimientos_proxima_fecha
-    ON seguimientos_cobranza(proxima_fecha) WHERE proxima_fecha IS NOT NULL;
-
-CREATE TABLE IF NOT EXISTS plantillas_cobranza (
-    id_plantilla  SERIAL PRIMARY KEY,
-    clave         VARCHAR(40) NOT NULL UNIQUE, -- RECORDATORIO_PREVIO | VENCIDO | CONFIRMACION_ABONO
-    cuerpo        TEXT NOT NULL,
-    canal         VARCHAR(20) NOT NULL DEFAULT 'WHATSAPP'
-);
-
-CREATE TABLE IF NOT EXISTS mensajes_cobranza (
-    id_mensaje        SERIAL PRIMARY KEY,
-    id_cliente        INTEGER NOT NULL REFERENCES clientes(id_cliente),
-    id_venta          INTEGER REFERENCES ventas(id_venta),
-    tipo              VARCHAR(30) NOT NULL, -- RECORDATORIO_PREVIO | VENCIDO | CONFIRMACION_ABONO | MANUAL
-    canal             VARCHAR(20) NOT NULL DEFAULT 'WHATSAPP',
-    texto_final       TEXT,
-    monto_reportado   NUMERIC(10,2),
-    fecha_programada  TIMESTAMP NOT NULL,
-    estatus           VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE', -- PENDIENTE | ENVIADO | CANCELADO
-    fecha_envio       TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_mensajes_estatus_fecha ON mensajes_cobranza(estatus, fecha_programada);
-
--- ---------------------------------------------------------------------
 -- AUDITORÍA (quién hizo qué)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS auditoria (
@@ -209,16 +148,14 @@ CREATE TABLE IF NOT EXISTS configuracion (
 INSERT INTO configuracion (clave, valor) VALUES
 ('LIMITE_CREDITO_DEFAULT', '1000'),
 ('PLAZO_DIAS_DEFAULT', '15'),
-('DIAS_GRACIA', '3'),
-('DIAS_AVISO_AMARILLO', '3'),
 ('NOMBRE_NEGOCIO', 'Mi Negocio')
 ON CONFLICT (clave) DO NOTHING;
 
 -- =====================================================================
--- VISTAS (semáforo, cartera, aging, flujo de caja, scoring)
+-- VISTAS (saldo de clientes y flujo de caja)
 -- =====================================================================
 
--- Saldo actual y semáforo por cliente
+-- Saldo y crédito disponible por cliente
 CREATE OR REPLACE VIEW vista_saldo_cliente AS
 SELECT
     c.id_cliente,
@@ -240,27 +177,7 @@ FROM clientes c
 LEFT JOIN ventas v ON v.id_cliente = c.id_cliente
 GROUP BY c.id_cliente, c.nombre_completo, c.telefono, c.limite_credito, c.estatus;
 
--- Reporte de morosidad por antigüedad (aging report)
-CREATE OR REPLACE VIEW vista_aging AS
-SELECT
-    v.id_venta,
-    c.id_cliente,
-    c.nombre_completo,
-    c.telefono,
-    v.saldo_pendiente,
-    v.fecha_limite_pago,
-    (CURRENT_DATE - v.fecha_limite_pago) AS dias_atraso,
-    CASE
-        WHEN v.fecha_limite_pago >= CURRENT_DATE THEN 'AL_CORRIENTE'
-        WHEN CURRENT_DATE - v.fecha_limite_pago BETWEEN 1 AND 15 THEN '1-15_DIAS'
-        WHEN CURRENT_DATE - v.fecha_limite_pago BETWEEN 16 AND 30 THEN '16-30_DIAS'
-        ELSE 'MAS_30_DIAS'
-    END AS rango_atraso
-FROM ventas v
-INNER JOIN clientes c ON c.id_cliente = v.id_cliente
-WHERE v.estatus IN ('PENDIENTE', 'PARCIAL', 'VENCIDA') AND v.saldo_pendiente > 0;
-
--- Flujo de caja: cobrado real vs. por cobrar (proyectado)
+-- Flujo de abonos registrados
 CREATE OR REPLACE VIEW vista_flujo_caja AS
 SELECT
     DATE(fecha_pago) AS dia,
@@ -268,39 +185,6 @@ SELECT
 FROM pagos_abonos
 GROUP BY DATE(fecha_pago)
 ORDER BY dia DESC;
-
-CREATE OR REPLACE VIEW vista_cartera_por_cobrar AS
-SELECT
-    DATE(fecha_limite_pago) AS dia,
-    SUM(saldo_pendiente) AS total_por_cobrar
-FROM ventas
-WHERE estatus IN ('PENDIENTE','PARCIAL','VENCIDA')
-GROUP BY DATE(fecha_limite_pago)
-ORDER BY dia ASC;
-
--- Scoring simple: % de pagos hechos a tiempo vs tarde por cliente
-CREATE OR REPLACE VIEW vista_scoring_cliente AS
-SELECT
-    c.id_cliente,
-    c.nombre_completo,
-    COUNT(v.id_venta) FILTER (WHERE v.estatus = 'PAGADA') AS ventas_pagadas,
-    COUNT(v.id_venta) FILTER (WHERE v.estatus = 'VENCIDA') AS ventas_vencidas,
-    ROUND(
-        100.0 * COUNT(v.id_venta) FILTER (WHERE v.estatus = 'PAGADA') /
-        NULLIF(COUNT(v.id_venta) FILTER (WHERE v.estatus IN ('PAGADA','VENCIDA')), 0)
-    , 1) AS porcentaje_puntualidad
-FROM clientes c
-LEFT JOIN ventas v ON v.id_cliente = c.id_cliente
-GROUP BY c.id_cliente, c.nombre_completo;
-
--- =====================================================================
--- DATOS SEMILLA
--- =====================================================================
-INSERT INTO plantillas_cobranza (clave, cuerpo, canal) VALUES
-('RECORDATORIO_PREVIO', 'Hola {nombre}, te recordamos que tu pago de ${monto} vence el {fecha}. ¡Gracias por tu preferencia!', 'WHATSAPP'),
-('VENCIDO', 'Hola {nombre}, tu pago de ${monto} venció el {fecha}. Por favor ponte al corriente para seguir disfrutando tu línea de crédito.', 'WHATSAPP'),
-('CONFIRMACION_ABONO', 'Hola {nombre}, confirmamos tu abono de ${monto}. Tu nuevo saldo es ${saldo}. ¡Gracias!', 'WHATSAPP')
-ON CONFLICT (clave) DO NOTHING;
 
 /*
 php -r 'echo password_hash("12345678", PASSWORD_DEFAULT), PHP_EOL;'

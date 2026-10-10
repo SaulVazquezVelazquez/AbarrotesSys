@@ -21,7 +21,6 @@ class AdminClientes extends BaseController
 
         $termino = $this->request->getGet('q');
         $filtros = [
-            'semaforo' => $this->request->getGet('semaforo'),
             'estatus' => $this->request->getGet('estatus'),
             'deuda' => $this->request->getGet('deuda'),
         ];
@@ -49,8 +48,6 @@ class AdminClientes extends BaseController
         $data['cliente']         = $cliente;
         $data['compras']         = $this->Modelo->getHistorialCompras($idCliente);
         $data['pagos']           = $this->Modelo->getHistorialPagos($idCliente);
-        $data['contactos']       = $this->Modelo->getContactos($idCliente);
-        $data['scoring']         = $this->Modelo->getScoring($idCliente);
         $data['actividad']       = $this->Modelo->getTimeline((int) $idCliente);
 
         return view('admin/cliente_ficha', $data);
@@ -198,23 +195,4 @@ class AdminClientes extends BaseController
         return $this->jsonResponse($resultado[0], $resultado[1]);
     }
 
-    public function guardarContacto()
-    {
-        if ($check = $this->requireAdmin(true)) {
-            return $check;
-        }
-
-        $idCliente = $this->request->getPost('id_cliente');
-        $nombre    = $this->request->getPost('nombre');
-        $telefono  = $this->request->getPost('telefono');
-        $relacion  = $this->request->getPost('relacion');
-
-        if (empty($idCliente) || empty($nombre)) {
-            return $this->jsonResponse(false, 'Faltan datos del contacto.');
-        }
-
-        $resultado = $this->Modelo->agregarContacto($idCliente, $nombre, $telefono, $relacion);
-
-        return $this->jsonResponse($resultado[0], $resultado[1]);
-    }
 }

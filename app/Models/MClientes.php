@@ -41,9 +41,6 @@ class MClientes extends Model
                 ->orLike('s.telefono', trim($termino), 'both', null, true)
                 ->groupEnd();
         }
-        if (in_array($filtros['semaforo'] ?? '', ['VERDE', 'AMARILLO', 'ROJO'], true)) {
-            $builder->where('s.semaforo', $filtros['semaforo']);
-        }
         if (in_array($filtros['estatus'] ?? '', ['ACTIVO', 'BLOQUEADO'], true)) {
             $builder->where('s.estatus', $filtros['estatus']);
         }
@@ -130,25 +127,6 @@ class MClientes extends Model
         return $this->db->query($vsql, [$idCliente])->getResult();
     }
 
-    public function getContactos($idCliente)
-    {
-        return $this->db->query("SELECT * FROM contactos_referencia WHERE id_cliente = ?", [$idCliente])->getResult();
-    }
-
-    public function agregarContacto($idCliente, $nombre, $telefono, $relacion)
-    {
-        $this->db->query(
-            "INSERT INTO contactos_referencia (id_cliente, nombre, telefono, relacion) VALUES (?, ?, ?, ?)",
-            [$idCliente, $nombre, $telefono, $relacion]
-        );
-        return [true, 'Contacto de referencia agregado.'];
-    }
-
-    public function getScoring($idCliente)
-    {
-        return $this->db->query("SELECT * FROM vista_scoring_cliente WHERE id_cliente = ?", [$idCliente])->getRow();
-    }
-
     public function getTimeline(int $idCliente): array
     {
         $sql = "SELECT * FROM (
@@ -161,18 +139,10 @@ class MClientes extends Model
                            p.fecha_pago, p.monto, 'REGISTRADO'
                     FROM pagos_abonos p WHERE p.id_cliente = ?
                     UNION ALL
-                    SELECT 'PROMESA', 'Promesa de pago', 'Prometió pagar el ' || to_char(pr.fecha_prometida, 'DD/MM/YYYY'),
-                           pr.fecha_creacion, pr.monto_prometido, pr.estatus
-                    FROM promesas_pago pr WHERE pr.id_cliente = ?
-                    UNION ALL
-                    SELECT 'GESTION', 'Gestión de cobranza', sc.resultado || COALESCE(' · ' || NULLIF(sc.detalle, ''), ''),
-                           sc.fecha_creacion, NULL::NUMERIC, COALESCE(sc.resultado, 'REGISTRADA')
-                    FROM seguimientos_cobranza sc WHERE sc.id_cliente = ?
-                    UNION ALL
                     SELECT 'SOLICITUD', 'Solicitud de compra', 'Solicitud #' || so.id_solicitud || ' · ' || so.estatus,
                            so.fecha_creacion, so.total_estimado, so.estatus
                     FROM solicitudes_compra so WHERE so.id_cliente = ?
                 ) actividad ORDER BY fecha DESC LIMIT 100";
-        return $this->db->query($sql, [$idCliente, $idCliente, $idCliente, $idCliente, $idCliente])->getResult();
+        return $this->db->query($sql, [$idCliente, $idCliente, $idCliente])->getResult();
     }
 }

@@ -32,7 +32,7 @@ if ! psql -d postgres -Atqc "SELECT 1 FROM pg_database WHERE datname = '$DB_DATA
   createdb "$DB_DATABASE"
 fi
 
-for script in credito_facil_schema.sql credito_facil_solicitudes.sql credito_facil_imagenes_productos.sql credito_facil_mejoras_operativas.sql tienda_barrio.sql; do
+for script in tienda_abarrotes_schema.sql pedidos_pickup.sql imagenes_productos.sql mejoras_operativas.sql tienda_barrio.sql; do
   echo "Aplicando $script..."
   psql -v ON_ERROR_STOP=1 -d "$DB_DATABASE" -f "$SCRIPT_DIR/$script"
 done

@@ -1,17 +1,10 @@
 <?= $this->include('admin/layout_header') ?>
 
-<?php
-function dotSemaforo($semaforo) {
-    return '<span class="semaforo-dot dot-' . strtolower($semaforo ?: 'verde') . '"></span>';
-}
-?>
-
 <div class="toolbar">
     <h1 style="margin-bottom:0;">Clientes</h1>
     <div class="toolbar-left">
         <form method="get" class="client-filters">
             <input type="search" name="q" class="admin-input" placeholder="Nombre o teléfono" value="<?= esc($_GET['q'] ?? '') ?>">
-            <select name="semaforo" class="admin-select"><option value="">Todos los semáforos</option><?php foreach (['VERDE','AMARILLO','ROJO'] as $semaforo): ?><option value="<?= $semaforo ?>" <?= ($_GET['semaforo'] ?? '') === $semaforo ? 'selected' : '' ?>><?= ucfirst(strtolower($semaforo)) ?></option><?php endforeach; ?></select>
             <select name="estatus" class="admin-select"><option value="">Todos los estados</option><option value="ACTIVO" <?= ($_GET['estatus'] ?? '') === 'ACTIVO' ? 'selected' : '' ?>>Activo</option><option value="BLOQUEADO" <?= ($_GET['estatus'] ?? '') === 'BLOQUEADO' ? 'selected' : '' ?>>Bloqueado</option></select>
             <select name="deuda" class="admin-select"><option value="">Con o sin saldo</option><option value="si" <?= ($_GET['deuda'] ?? '') === 'si' ? 'selected' : '' ?>>Con deuda</option><option value="no" <?= ($_GET['deuda'] ?? '') === 'no' ? 'selected' : '' ?>>Sin deuda</option></select>
             <button type="submit" class="btn btn-secondary btn-sm"><i class="fa-solid fa-filter"></i> Filtrar</button>
@@ -21,12 +14,11 @@ function dotSemaforo($semaforo) {
 </div>
 
 <table class="admin-table">
-    <thead><tr><th>Semáforo</th><th>Cliente</th><th>Teléfono</th><th>Saldo actual</th><th>Límite</th><th>Disponible</th><th></th></tr></thead>
+    <thead><tr><th>Cliente</th><th>Teléfono</th><th>Saldo actual</th><th>Límite</th><th>Disponible</th><th></th></tr></thead>
     <tbody>
         <?php foreach ($clientes as $c): ?>
         <?php $iniciales = mb_strtoupper(mb_substr(trim($c->nombre_completo), 0, 1) . (mb_strpos(trim($c->nombre_completo), ' ') !== false ? mb_substr(trim($c->nombre_completo), mb_strpos(trim($c->nombre_completo), ' ') + 1, 1) : '')); ?>
         <tr>
-            <td><?= dotSemaforo($c->semaforo) ?><?= esc($c->semaforo) ?></td>
             <td><div class="client-table-identity"><span class="client-avatar client-avatar-sm"><?php if (!empty($c->foto)): ?><img src="<?= base_url('admin/clientes/' . $c->id_cliente . '/foto') ?>" alt="Foto de <?= esc($c->nombre_completo) ?>"><?php else: ?><?= esc($iniciales) ?><?php endif; ?></span><span><?= esc($c->nombre_completo) ?> <?= $c->estatus === 'BLOQUEADO' ? '<span class="badge badge-bloqueado">Bloqueado</span>' : '' ?></span></div></td>
             <td><?= esc($c->telefono) ?></td>
             <td>$<?= number_format($c->saldo_actual, 2) ?></td>
@@ -36,7 +28,7 @@ function dotSemaforo($semaforo) {
         </tr>
         <?php endforeach; ?>
         <?php if (empty($clientes)): ?>
-            <tr><td colspan="7">No se encontraron clientes con esos filtros.</td></tr>
+            <tr><td colspan="6">No se encontraron clientes con esos filtros.</td></tr>
         <?php endif; ?>
     </tbody>
 </table>

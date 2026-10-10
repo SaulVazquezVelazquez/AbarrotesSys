@@ -92,7 +92,6 @@ class AdminVentas extends BaseController
 
         return $this->jsonResponse($ok, $mensaje, [
             'credito_disponible' => $saldo->credito_disponible,
-            'semaforo'           => $saldo->semaforo,
         ]);
     }
 
