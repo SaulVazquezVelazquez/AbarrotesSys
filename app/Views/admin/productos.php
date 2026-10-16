@@ -26,14 +26,14 @@
         </div>
         <div style="overflow:auto;border:1px solid #e3e8ee;border-radius:8px;">
             <table style="min-width:1550px;width:100%;border-collapse:collapse;font-size:12px;">
-                <thead><tr><th>Fila</th><th>Nombre</th><th>Descripción</th><th>Categoría</th><th>Precio</th><th>Existencia</th><th>Mínimo</th><th>Código barras</th><th>PLU</th><th>Departamento</th><th>Unidad</th><th>Unidades/empaque</th><th>Errores</th></tr></thead>
+                <thead><tr><th>Fila</th><th>Nombre</th><th>Descripción</th><th>Categoría</th><th>Precio</th><th>Existencia</th><th>Mínimo</th><th>Código barras</th><th>PLU</th><th>Departamento</th><th>Unidad</th><th>Unidades/empaque</th><th>Errores</th><th>Acción</th></tr></thead>
                 <tbody id="importFilas"></tbody>
             </table>
         </div>
     </div>
 </section>
 <style>
-#importPreview[hidden],#importMensaje[hidden]{display:none!important}#importFilas td,#importPreview th{padding:7px;border-bottom:1px solid #e8edf2;text-align:left;vertical-align:top}#importPreview th{background:#f6f8fa;position:sticky;top:0}#importFilas tr.import-row-error{background:#fff8f6}#importFilas input,#importFilas select{width:120px;min-height:34px;padding:5px;border:1px solid #cfd8e3;border-radius:5px}#importFilas td:last-child{min-width:220px;color:#b42318}#importFilas tr.import-row-ok td:last-child{color:#167344}
+#importPreview[hidden],#importMensaje[hidden]{display:none!important}#importFilas td,#importPreview th{padding:7px;border-bottom:1px solid #e8edf2;text-align:left;vertical-align:top}#importPreview th{background:#f6f8fa;position:sticky;top:0}#importFilas tr.import-row-error{background:#fff8f6}#importFilas input,#importFilas select{width:120px;min-height:34px;padding:5px;border:1px solid #cfd8e3;border-radius:5px}#importFilas .import-errors{min-width:220px;color:#b42318}#importFilas tr.import-row-ok .import-errors{color:#167344}#importFilas .import-remove{white-space:nowrap}
 </style>
 
 <form method="get" class="product-filters">
@@ -151,8 +151,8 @@ function renderizarFilasImportacion(){
         const numero=document.createElement('td');numero.textContent=String(fila.numero||index+2);tr.append(numero);
         camposImportacion.forEach(([campo,label])=>{
             const td=document.createElement('td');let input;
-            if(campo==='departamento'||campo==='unidad_base'){
-                input=document.createElement('select');const opciones=campo==='departamento'?['ABARROTES','VERDULERIA']:['PZA','KG','G','L'];
+            if(campo==='unidad_base'){
+                input=document.createElement('select');const opciones=['PZA','KG','G','L'];
                 opciones.forEach(valor=>{const option=document.createElement('option');option.value=valor;option.textContent=valor;input.append(option)});
             }else{
                 input=document.createElement('input');input.type=campo==='precio'||campo==='stock'||campo==='stock_minimo'||campo==='unidades_por_empaque'?'number':'text';
@@ -163,11 +163,12 @@ function renderizarFilasImportacion(){
             input.addEventListener('change',()=>{fila.datos[campo]=input.value});
             td.append(input);tr.append(td);
         });
-        const error=document.createElement('td');error.textContent=fila.errores.length?fila.errores.join(' · '):'Correcto';tr.append(error);tbody.append(tr);
+        const error=document.createElement('td');error.className='import-errors';error.textContent=fila.errores.length?fila.errores.join(' · '):'Correcto';tr.append(error);
+        const accion=document.createElement('td');const eliminar=document.createElement('button');eliminar.type='button';eliminar.className='btn btn-secondary btn-sm import-remove';eliminar.textContent='Eliminar';eliminar.setAttribute('aria-label','Eliminar producto de la fila '+fila.numero);eliminar.addEventListener('click',()=>{filasImportacion.splice(index,1);renderizarFilasImportacion()});accion.append(eliminar);tr.append(accion);tbody.append(tr);
     });
     const count=filasImportacion.length, wrong=filasImportacion.filter(f=>f.errores.length).length;
-    document.getElementById('importResumen').textContent=wrong?`${count} productos revisados · ${wrong} fila(s) requieren corrección`:`${count} productos listos para guardar`;
-    document.getElementById('guardarImportacion').disabled=false;
+    document.getElementById('importResumen').textContent=count===0?'No quedan productos en esta carga':wrong?`${count} productos revisados · ${wrong} fila(s) requieren corrección`:`${count} productos listos para guardar`;
+    document.getElementById('guardarImportacion').disabled=count===0;
     importPreview.hidden=false;
 }
 formImportacion.addEventListener('submit',async event=>{

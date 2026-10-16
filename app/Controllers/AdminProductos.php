@@ -8,6 +8,7 @@ class AdminProductos extends BaseController
 {
     protected MProductos $Modelo;
     private ?array $categoriasExistentesImportacion = null;
+    private ?array $departamentosExistentesImportacion = null;
 
     function __construct()
     {
@@ -147,8 +148,7 @@ class AdminProductos extends BaseController
         $pack = str_replace(',', '.', trim((string) ($row['unidades_por_empaque'] ?? '1')));
         $barcode = trim((string) ($row['codigo_barras'] ?? ''));
         $plu = trim((string) ($row['plu'] ?? ''));
-        $department = mb_strtoupper(trim((string) ($row['departamento'] ?? '')));
-        $department = str_replace('Í', 'I', $department);
+        $department = $this->normalizarDepartamentoImportado((string) ($row['departamento'] ?? ''), $db);
         $unit = strtoupper(trim((string) ($row['unidad_base'] ?? '')));
         $categoryInput = trim((string) ($row['categoria'] ?? ''));
         $category = $this->coincidenciaCategoria($categoryInput, $db);
@@ -156,7 +156,7 @@ class AdminProductos extends BaseController
 
         if ($name === '' || mb_strlen($name) > 150) $errors[] = 'Nombre obligatorio (máximo 150 caracteres).';
         if ($price === null || $price <= 0) $errors[] = 'Precio debe ser mayor que cero. Usa un importe válido en pesos mexicanos.';
-        if (!in_array($department, ['ABARROTES', 'VERDULERIA'], true)) $errors[] = 'Departamento debe ser ABARROTES o VERDULERIA.';
+        if ($department === '' || mb_strlen($department, 'UTF-8') > 20) $errors[] = 'Departamento obligatorio (máximo 20 caracteres).';
         if (!in_array($unit, ['PZA', 'KG', 'G', 'L'], true)) $errors[] = 'Unidad debe ser PZA, KG, G o L.';
         if (!is_numeric($stock) || (float) $stock < 0) $errors[] = 'Existencia debe ser igual o mayor que cero.';
         if (!is_numeric($stockMinimo) || (float) $stockMinimo < 0) $errors[] = 'Stock mínimo debe ser igual o mayor que cero.';
@@ -248,6 +248,46 @@ class AdminProductos extends BaseController
             if (mb_strtolower($existente, 'UTF-8') === $buscada) return $existente;
         }
         return $categoria;
+    }
+
+    private function normalizarDepartamentoImportado(string $departamento, $db): string
+    {
+        $departamento = mb_strtoupper(trim($departamento), 'UTF-8');
+        $departamento = strtr($departamento, [
+            'Á' => 'A', 'À' => 'A', 'Ä' => 'A', 'Â' => 'A',
+            'É' => 'E', 'È' => 'E', 'Ë' => 'E', 'Ê' => 'E',
+            'Í' => 'I', 'Ì' => 'I', 'Ï' => 'I', 'Î' => 'I',
+            'Ó' => 'O', 'Ò' => 'O', 'Ö' => 'O', 'Ô' => 'O',
+            'Ú' => 'U', 'Ù' => 'U', 'Ü' => 'U', 'Û' => 'U', 'Ñ' => 'N',
+        ]);
+        $departamento = preg_replace('/\s+/u', ' ', $departamento) ?? $departamento;
+
+        if ($this->departamentosExistentesImportacion === null) {
+            $this->departamentosExistentesImportacion = [];
+            $existentes = $db->query('SELECT DISTINCT departamento FROM productos WHERE departamento IS NOT NULL')->getResultArray();
+            foreach ($existentes as $fila) {
+                $normalizado = $this->normalizarNombreDepartamento((string) $fila['departamento']);
+                if ($normalizado !== '') $this->departamentosExistentesImportacion[$normalizado] = true;
+            }
+        }
+
+        // Un departamento nuevo se registra como referencia para las siguientes filas.
+        // Al guardar la importación queda persistido en productos.departamento.
+        if ($departamento !== '') $this->departamentosExistentesImportacion[$departamento] = true;
+        return $departamento;
+    }
+
+    private function normalizarNombreDepartamento(string $departamento): string
+    {
+        $departamento = mb_strtoupper(trim($departamento), 'UTF-8');
+        $departamento = strtr($departamento, [
+            'Á' => 'A', 'À' => 'A', 'Ä' => 'A', 'Â' => 'A',
+            'É' => 'E', 'È' => 'E', 'Ë' => 'E', 'Ê' => 'E',
+            'Í' => 'I', 'Ì' => 'I', 'Ï' => 'I', 'Î' => 'I',
+            'Ó' => 'O', 'Ò' => 'O', 'Ö' => 'O', 'Ô' => 'O',
+            'Ú' => 'U', 'Ù' => 'U', 'Ü' => 'U', 'Û' => 'U', 'Ñ' => 'N',
+        ]);
+        return preg_replace('/\s+/u', ' ', $departamento) ?? $departamento;
     }
 
     private function normalizarEncabezado(string $header): string
