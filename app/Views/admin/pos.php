@@ -124,16 +124,43 @@ async function handleScan(value, isBarcode=false, commitSingle=false) {
         if(mode==='price' && matches.length===1){showPrice(matches[0]);return}
         if(mode==='sale' && commitSingle && matches.length===1){openProductOptions(matches[0]);return}
         showMatches(matches);
-        if((isBarcode||commitSingle)&&!matches.length)showToast('No encontramos ese producto. Revisa el código o prueba con otra búsqueda.',true);
+        if(!matches.length && isBarcode && mode==='sale') openQuickProduct(query);
+        else if((isBarcode||commitSingle)&&!matches.length) showToast('No encontramos ese producto. Revisa el código o prueba con otra búsqueda.',true);
     } catch(error) { showToast(error.message||'No se pudo buscar el producto.',true); }
 }
 function showMatches(matches) {
     const container=$('matches');container.replaceChildren();activeMatchIndex=-1;
     matches.slice(0,10).forEach((product,index)=>{const button=document.createElement('button');button.type='button';button.className='pos-match';button.setAttribute('role','option');button.setAttribute('aria-selected','false');const left=document.createElement('span');const name=document.createElement('strong');name.textContent=product.nombre;const detail=document.createElement('small');detail.textContent=(product.departamento||'ABARROTES')+' · Existencia '+(product.stock??'sin control')+' '+(product.unidad_base||'PZA');left.append(name,detail);const price=document.createElement('strong');price.textContent='$'+money(product.precio)+' / '+(product.unidad_base||'PZA');button.append(left,price);button.addEventListener('click',()=>{if(mode==='price'){showPrice(product);container.replaceChildren()}else openProductOptions(product)});button.addEventListener('mouseenter',()=>setActiveMatch(index));container.append(button)});
 }
+function openQuickProduct(barcode){
+    const form=modalForm([
+        {id:'quickBarcode',label:'Código de barras',value:barcode,required:true},
+        {id:'quickName',label:'Nombre del producto',required:true},
+        {id:'quickPrice',label:'Precio de venta',type:'number',min:'.01',step:'.01',placeholder:'0.00',required:true},
+        {id:'quickDepartment',label:'Departamento',type:'select',options:[{value:'ABARROTES',label:'Abarrotes'},{value:'VERDULERIA',label:'Verdulería'}]},
+        {id:'quickUnit',label:'Unidad de venta',type:'select',options:[{value:'PZA',label:'Pieza'},{value:'KG',label:'Kilogramo'},{value:'G',label:'Gramo'},{value:'L',label:'Litro'}]},
+        {id:'quickStock',label:'Existencia inicial',type:'number',min:'0',step:'.001',value:'1',required:true},
+        {id:'quickCategory',label:'Categoría (opcional)'},
+        {id:'quickDescription',label:'Descripción (opcional)'}
+    ],'Registrar y agregar',async values=>{
+        try{
+            const result=await apiPost(BASE+'admin/pos/producto-rapido',{
+                codigo_barras:values.quickBarcode,nombre:values.quickName,precio:values.quickPrice,
+                departamento:values.quickDepartment,unidad_base:values.quickUnit,stock:values.quickStock,
+                categoria:values.quickCategory,descripcion:values.quickDescription
+            });
+            if(!result.respuesta)throw new Error(result.mensaje);
+            products.push(result.producto);
+            closeTool();
+            addProduct(result.producto);
+            showToast('Producto registrado y agregado a la cuenta.');
+        }catch(error){showToast(error.message||'No se pudo registrar el producto.',true)}
+    });
+    setModal('Producto no encontrado · alta rápida',form);
+}
 function setActiveMatch(index){const options=[...$('matches').querySelectorAll('.pos-match')];if(!options.length)return;activeMatchIndex=Math.max(0,Math.min(index,options.length-1));options.forEach((option,i)=>{option.classList.toggle('active',i===activeMatchIndex);option.setAttribute('aria-selected',String(i===activeMatchIndex))});options[activeMatchIndex].scrollIntoView({block:'nearest'});}
 function showPrice(product) { $('priceResult').replaceChildren(); const info=document.createElement('div');info.className='pos-price-product';info.textContent=product.nombre;const meta=document.createElement('small');meta.textContent=(product.departamento||'ABARROTES')+' · '+(product.unidad_base||'PZA')+(product.etiqueta_peso?' · Etiqueta: '+Number(product.cantidad_venta).toLocaleString('es-MX',{maximumFractionDigits:3})+' '+(product.unidad_base||'kg'):'');info.append(meta);const price=document.createElement('strong');price.className='pos-price-amount';price.textContent='$'+money(product.etiqueta_peso?product.precio_etiqueta:product.precio);const stock=document.createElement('small');stock.className='pos-price-stock';stock.textContent=(product.etiqueta_peso?'Importe de la etiqueta · precio unitario $'+money(product.precio)+' / '+(product.unidad_base||'kg')+' · ':'')+'Existencia: '+(product.stock??'sin control')+' '+(product.unidad_base||'PZA');price.append(stock);$('priceResult').append(info,price);$('priceResult').hidden=false; }
- $('scanner').addEventListener('keydown',event=>{const options=$('matches').querySelectorAll('.pos-match');if(event.key==='ArrowDown'&&options.length){event.preventDefault();setActiveMatch(activeMatchIndex+1);return}if(event.key==='ArrowUp'&&options.length){event.preventDefault();setActiveMatch(activeMatchIndex<0?options.length-1:activeMatchIndex-1);return}if(event.key==='Enter'){event.preventDefault();if(activeMatchIndex>=0&&options[activeMatchIndex]){options[activeMatchIndex].click();return}clearTimeout(searchTimer);const value=$('scanner').value.trim();const numericCode=/^\d{8,14}$/.test(value);handleScan(value,numericCode,true)}if(event.key==='Escape')$('matches').replaceChildren()});
+ $('scanner').addEventListener('keydown',event=>{const options=$('matches').querySelectorAll('.pos-match');if(event.key==='ArrowDown'&&options.length){event.preventDefault();setActiveMatch(activeMatchIndex+1);return}if(event.key==='ArrowUp'&&options.length){event.preventDefault();setActiveMatch(activeMatchIndex<0?options.length-1:activeMatchIndex-1);return}if(event.key==='Enter'){event.preventDefault();clearTimeout(searchTimer);const value=$('scanner').value.trim();const numericCode=/^\d{8,14}$/.test(value);if(!numericCode&&activeMatchIndex>=0&&options[activeMatchIndex]){options[activeMatchIndex].click();return}if(numericCode){$('matches').replaceChildren();activeMatchIndex=-1}handleScan(value,numericCode,true)}if(event.key==='Escape')$('matches').replaceChildren()});
 $('scanner').addEventListener('input',event=>{clearTimeout(searchTimer);activeMatchIndex=-1;$('priceResult').hidden=true;if(event.target.value.trim().length<1){$('matches').replaceChildren();return}searchTimer=setTimeout(()=>handleScan(event.target.value,false),150)});
 function updatePaymentSummary(){const total=cart.reduce((sum,item)=>sum+lineAmount(item),0), method=$('payment').value, received=Number($('received').value||0);$('payTotal').textContent=money(total);$('changeDue').textContent=money(Math.max(0,received-total));const mix=Number($('mixCash').value||0)+Number($('mixTransfer').value||0)+Number($('mixCard').value||0);$('mixRemaining').textContent=mix>=total?'Listo':('$'+money(total-mix));$('mixRemaining').style.color=mix>total+.01?'#c2473e':'#27364a';$('receivedWrap').hidden=['MIXTO','CREDITO'].includes(method)||method!=='EFECTIVO';$('mixedWrap').hidden=method!=='MIXTO';$('creditNote').hidden=method!=='CREDITO';$('chargeButton').innerHTML=method==='CREDITO'?'<i class="fa-solid fa-book"></i> Cargar a cuenta':'<i class="fa-solid fa-check"></i> Cobrar venta';}
 $('payment').addEventListener('change',()=>{if(['TRANSFERENCIA','TARJETA'].includes($('payment').value))$('received').value=$('total').textContent;updatePaymentSummary()});['received','mixCash','mixTransfer','mixCard'].forEach(id=>$(id).addEventListener('input',updatePaymentSummary));
@@ -190,7 +217,7 @@ function openTool(type){
                 setModal('Abono registrado',receipt);showToast('Abono registrado correctamente.');
             }catch(error){showToast(error.message,true)}
         });
-        const search=$('paySearch'), picker=document.createElement('div'), results=document.createElement('div');picker.className='pos-customer-wrap';results.className='pos-customer-results';results.hidden=true;search.parentNode.insertBefore(picker,search);picker.append(search,results);let timer;
+        const search=form.querySelector('#paySearch'), picker=document.createElement('div'), results=document.createElement('div');picker.className='pos-customer-wrap';results.className='pos-customer-results';results.hidden=true;search.parentNode.insertBefore(picker,search);picker.append(search,results);let timer;
         search.addEventListener('input',()=>{selectedPayCustomer=null;clearTimeout(timer);const query=search.value.trim();if(query.length<2){results.hidden=true;return}timer=setTimeout(async()=>{try{const data=await apiGet(BASE+'admin/clientes/buscarJson?q='+encodeURIComponent(query));results.replaceChildren();(data.data||[]).filter(customer=>customer.estatus==='ACTIVO').slice(0,8).forEach(customer=>{const option=document.createElement('button');option.type='button';option.className='pos-customer-option';const name=document.createElement('strong');name.textContent=customer.nombre_completo;const detail=document.createElement('small');detail.textContent=(customer.telefono||'Sin teléfono')+' · Saldo $'+money(customer.saldo_actual);option.append(name,detail);option.addEventListener('click',()=>{selectedPayCustomer=customer;search.value=customer.nombre_completo+' · '+customer.telefono;results.hidden=true});results.append(option)});if(!results.childElementCount){const none=document.createElement('div');none.className='pos-customer-option';none.textContent='No hay clientes activos con esa búsqueda.';results.append(none)}results.hidden=false}catch(error){showToast(error.message,true)}},220)});
         setModal('Registrar abono a cuenta',form);$('paySearch').focus();
     }

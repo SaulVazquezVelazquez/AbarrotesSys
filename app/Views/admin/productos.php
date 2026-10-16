@@ -13,12 +13,28 @@
 <section class="card" style="margin:16px 0; padding:18px;">
     <h2 style="margin:0 0 8px;">Carga masiva desde Excel</h2>
     <p class="form-help">Sube un archivo .xlsx o .csv. Usa la plantilla con la columna opcional <strong>stock_minimo</strong>; los códigos de barras ya registrados se omiten.</p>
-    <form method="post" action="<?= base_url('admin/productos/importar') ?>" enctype="multipart/form-data" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+    <form id="formImportacion" method="post" action="<?= base_url('admin/productos/importar') ?>" enctype="multipart/form-data" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
         <?= csrf_field() ?>
         <input type="file" name="archivo_productos" accept=".xlsx,.csv" required>
-        <button class="btn btn-primary btn-sm" type="submit">Importar productos</button>
+        <button class="btn btn-primary btn-sm" type="submit">Revisar archivo</button>
     </form>
+    <p id="importMensaje" class="form-mensaje" hidden style="display:block;margin:12px 0 0;"></p>
+    <div id="importPreview" hidden style="margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+            <strong id="importResumen"></strong>
+            <button id="guardarImportacion" type="button" class="btn btn-primary btn-sm">Guardar productos</button>
+        </div>
+        <div style="overflow:auto;border:1px solid #e3e8ee;border-radius:8px;">
+            <table style="min-width:1550px;width:100%;border-collapse:collapse;font-size:12px;">
+                <thead><tr><th>Fila</th><th>Nombre</th><th>Descripción</th><th>Categoría</th><th>Precio</th><th>Existencia</th><th>Mínimo</th><th>Código barras</th><th>PLU</th><th>Departamento</th><th>Unidad</th><th>Unidades/empaque</th><th>Errores</th></tr></thead>
+                <tbody id="importFilas"></tbody>
+            </table>
+        </div>
+    </div>
 </section>
+<style>
+#importPreview[hidden],#importMensaje[hidden]{display:none!important}#importFilas td,#importPreview th{padding:7px;border-bottom:1px solid #e8edf2;text-align:left;vertical-align:top}#importPreview th{background:#f6f8fa;position:sticky;top:0}#importFilas tr.import-row-error{background:#fff8f6}#importFilas input,#importFilas select{width:120px;min-height:34px;padding:5px;border:1px solid #cfd8e3;border-radius:5px}#importFilas td:last-child{min-width:220px;color:#b42318}#importFilas tr.import-row-ok td:last-child{color:#167344}
+</style>
 
 <form method="get" class="product-filters">
     <input type="search" name="q" class="admin-input" placeholder="Buscar producto" value="<?= esc($filtros['q'] ?? '') ?>">
@@ -118,6 +134,66 @@ function abrirEditar(p, imagenes = []) {
     }
     openModal('modalProducto');
 }
+const formImportacion=document.getElementById('formImportacion');
+const importPreview=document.getElementById('importPreview');
+const importMensaje=document.getElementById('importMensaje');
+let filasImportacion=[];
+const camposImportacion=[
+    ['nombre','Nombre'],['descripcion','Descripción'],['categoria','Categoría'],['precio','Precio'],
+    ['stock','Existencia'],['stock_minimo','Mínimo'],['codigo_barras','Código barras'],['plu','PLU'],
+    ['departamento','Departamento'],['unidad_base','Unidad'],['unidades_por_empaque','Unidades/empaque']
+];
+function mostrarMensajeImportacion(texto,ok=false){importMensaje.textContent=texto;importMensaje.className='form-mensaje '+(ok?'ok':'error');importMensaje.hidden=false;}
+function renderizarFilasImportacion(){
+    const tbody=document.getElementById('importFilas');tbody.replaceChildren();
+    filasImportacion.forEach((fila,index)=>{
+        const tr=document.createElement('tr');tr.className=fila.errores.length?'import-row-error':'import-row-ok';
+        const numero=document.createElement('td');numero.textContent=String(fila.numero||index+2);tr.append(numero);
+        camposImportacion.forEach(([campo,label])=>{
+            const td=document.createElement('td');let input;
+            if(campo==='departamento'||campo==='unidad_base'){
+                input=document.createElement('select');const opciones=campo==='departamento'?['ABARROTES','VERDULERIA']:['PZA','KG','G','L'];
+                opciones.forEach(valor=>{const option=document.createElement('option');option.value=valor;option.textContent=valor;input.append(option)});
+            }else{
+                input=document.createElement('input');input.type=campo==='precio'||campo==='stock'||campo==='stock_minimo'||campo==='unidades_por_empaque'?'number':'text';
+                if(input.type==='number'){input.step='any';if(campo==='precio')input.min='0.01';else input.min='0'}
+            }
+            input.setAttribute('aria-label',label+' de la fila '+fila.numero);input.value=fila.datos[campo]??'';
+            input.addEventListener('input',()=>{fila.datos[campo]=input.value});
+            input.addEventListener('change',()=>{fila.datos[campo]=input.value});
+            td.append(input);tr.append(td);
+        });
+        const error=document.createElement('td');error.textContent=fila.errores.length?fila.errores.join(' · '):'Correcto';tr.append(error);tbody.append(tr);
+    });
+    const count=filasImportacion.length, wrong=filasImportacion.filter(f=>f.errores.length).length;
+    document.getElementById('importResumen').textContent=wrong?`${count} productos revisados · ${wrong} fila(s) requieren corrección`:`${count} productos listos para guardar`;
+    document.getElementById('guardarImportacion').disabled=false;
+    importPreview.hidden=false;
+}
+formImportacion.addEventListener('submit',async event=>{
+    event.preventDefault();const boton=formImportacion.querySelector('button[type="submit"]');
+    boton.disabled=true;boton.textContent='Revisando…';importPreview.hidden=true;importMensaje.hidden=true;
+    try{
+        const response=await fetch(formImportacion.action,{method:'POST',body:new FormData(formImportacion),headers:{'X-Requested-With':'XMLHttpRequest'}});
+        const data=await response.json();if(!response.ok||!data.respuesta)throw new Error(data.mensaje||'No se pudo revisar el archivo.');
+        filasImportacion=data.filas||[];renderizarFilasImportacion();mostrarMensajeImportacion(data.mensaje,!(data.con_error>0));
+    }catch(error){mostrarMensajeImportacion(error.message||'No se pudo revisar el archivo.')}
+    finally{boton.disabled=false;boton.textContent='Revisar archivo'}
+});
+document.getElementById('guardarImportacion').addEventListener('click',async event=>{
+    const boton=event.currentTarget;boton.disabled=true;boton.textContent='Validando y guardando…';
+    try{
+        const body=new URLSearchParams({productos:JSON.stringify(filasImportacion.map(f=>f.datos))});
+        const response=await fetch(BASE+'admin/productos/importar/guardar',{method:'POST',body,headers:{'X-Requested-With':'XMLHttpRequest'}});
+        const data=await response.json();
+        if(data.filas){filasImportacion=data.filas;renderizarFilasImportacion()}
+        if(!response.ok||!data.respuesta)throw new Error(data.mensaje||'No se pudieron guardar los productos.');
+        mostrarMensajeImportacion(data.mensaje,true);importPreview.hidden=true;formImportacion.reset();
+        setTimeout(()=>window.location.reload(),1200);
+    }catch(error){mostrarMensajeImportacion(error.message||'No se pudieron guardar los productos.')}
+    finally{boton.disabled=false;boton.textContent='Guardar productos'}
+});
+
 document.getElementById('formProducto').addEventListener('submit', async function () {
     const formData = new FormData(document.getElementById('formProducto'));
     const res = await fetch(BASE + 'admin/productos/guardar', { method: 'POST', body: formData });

@@ -53,6 +53,7 @@ $routes->group('admin', function ($routes) {
     // Punto de venta de Tienda y Abarrotes
     $routes->get('pos', 'AdminPOS::index');
     $routes->get('pos/buscar', 'AdminPOS::buscar');
+    $routes->post('pos/producto-rapido', 'AdminPOS::productoRapido');
     $routes->post('pos/cobrar', 'AdminPOS::cobrar');
     $routes->get('pos/ticket/(:num)', 'AdminPOS::ticket/$1');
     $routes->post('pos/pausar', 'AdminPOS::pausar');
@@ -85,6 +86,7 @@ $routes->group('admin', function ($routes) {
     $routes->post('productos/guardar', 'AdminProductos::guardar');
     $routes->get('productos/plantilla', 'AdminProductos::plantilla');
     $routes->post('productos/importar', 'AdminProductos::importar');
+    $routes->post('productos/importar/guardar', 'AdminProductos::guardarImportacion');
 
     // Ventas (POS a crédito)
     $routes->get('ventas', 'AdminVentas::index');

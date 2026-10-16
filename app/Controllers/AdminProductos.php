@@ -52,79 +52,138 @@ class AdminProductos extends BaseController
 
     public function importar()
     {
-        if ($check = $this->requireAdmin(true)) {
-            return $check;
-        }
+        if ($check = $this->requireAdmin(true)) return $check;
+
         $file = $this->request->getFile('archivo_productos');
-        if (!$file || !$file->isValid()) {
-            return redirect()->to(base_url('admin/productos'))->with('error', 'Selecciona un archivo CSV o Excel válido.');
-        }
+        if (!$file || !$file->isValid()) return $this->jsonResponse(false, 'Selecciona un archivo Excel o CSV válido.');
         $extension = strtolower($file->getClientExtension());
         try {
-            $rows = $extension === 'xlsx' ? $this->leerXlsx($file->getTempName()) : ($extension === 'csv' ? $this->leerCsv($file->getTempName()) : null);
-            if ($rows === null) {
-                throw new \RuntimeException('Formato no válido. Usa .xlsx o .csv.');
-            }
-            if (count($rows) > 5000) {
-                throw new \RuntimeException('El archivo supera el límite de 5,000 filas.');
-            }
+            $rows = $extension === 'xlsx'
+                ? $this->leerXlsx($file->getTempName())
+                : ($extension === 'csv' ? $this->leerCsv($file->getTempName()) : null);
+            if ($rows === null) throw new \RuntimeException('Formato no válido. Usa .xlsx o .csv.');
+            if (count($rows) > 5001) throw new \RuntimeException('El archivo supera el límite de 5,000 productos.');
+
             $headers = array_map([$this, 'normalizarEncabezado'], array_shift($rows) ?? []);
             $required = ['nombre', 'precio', 'departamento', 'unidad_base'];
             if (array_diff($required, $headers)) {
                 throw new \RuntimeException('Faltan encabezados obligatorios: nombre, precio, departamento y unidad_base. Descarga la plantilla para ver el formato.');
             }
+
             $db = db_connect();
-            $inserted = 0; $skipped = 0; $errors = [];
-            $db->transBegin();
+            $filas = [];
+            $codigosVistos = [];
+            $plusVistos = [];
             foreach ($rows as $i => $cells) {
                 if (count(array_filter($cells, static fn($v) => trim((string) $v) !== '')) === 0) continue;
-                $row = [];
-                foreach ($headers as $col => $key) if ($key !== '') $row[$key] = trim((string) ($cells[$col] ?? ''));
-                $name = $row['nombre'] ?? '';
-                $price = str_replace(',', '.', $row['precio'] ?? '');
-                if ($name === '' || !is_numeric($price) || (float) $price <= 0) {
-                    $errors[] = 'Fila ' . ($i + 2) . ': nombre y precio mayor que cero son obligatorios.';
-                    continue;
-                }
-                $department = strtoupper($row['departamento'] ?? 'ABARROTES');
-                $unit = strtoupper($row['unidad_base'] ?? 'PZA');
-                if (!in_array($department, ['ABARROTES', 'VERDULERIA'], true) || !in_array($unit, ['PZA', 'KG', 'G', 'L'], true)) {
-                    $errors[] = 'Fila ' . ($i + 2) . ': departamento o unidad_base no reconocidos.';
-                    continue;
-                }
-                $barcode = ($row['codigo_barras'] ?? '') ?: null;
-                if ($barcode && $db->table('productos')->where('codigo_barras', $barcode)->countAllResults() > 0) { $skipped++; continue; }
-                $plu = ($row['plu'] ?? '') ?: null;
-                if ($plu && $db->table('productos')->where('plu', $plu)->countAllResults() > 0) { $skipped++; continue; }
-                $stock = str_replace(',', '.', $row['stock'] ?? '0');
-                $stockMinimo = str_replace(',', '.', $row['stock_minimo'] ?? '0');
-                $pack = str_replace(',', '.', $row['unidades_por_empaque'] ?? '1');
-                if (!is_numeric($stock) || (float) $stock < 0 || !is_numeric($stockMinimo) || (float) $stockMinimo < 0 || !is_numeric($pack) || (float) $pack <= 0) {
-                    $errors[] = 'Fila ' . ($i + 2) . ': stock, stock_minimo o unidades_por_empaque no válido.';
-                    continue;
-                }
-                $data = [
-                    'nombre' => mb_substr($name, 0, 150), 'descripcion' => $row['descripcion'] ?? null,
-                    'categoria' => $row['categoria'] ?? null, 'precio' => $price,
-                    'stock' => $stock,
-                    'stock_minimo' => $stockMinimo,
-                    'codigo_barras' => $barcode, 'plu' => $plu,
-                    'departamento' => $department, 'unidad_base' => $unit,
-                    'unidades_por_empaque' => $pack,
-                    'activo' => 1,
-                ];
-                if (!$db->table('productos')->insert($data)) $errors[] = 'Fila ' . ($i + 2) . ': no se pudo guardar.';
-                else $inserted++;
+                $raw = [];
+                foreach ($headers as $col => $key) if ($key !== '') $raw[$key] = trim((string) ($cells[$col] ?? ''));
+                [$data, $errores] = $this->validarFilaImportada($raw, $db, $codigosVistos, $plusVistos);
+                $filas[] = ['numero' => $i + 2, 'datos' => $data, 'errores' => $errores];
             }
-            if ($db->transStatus() === false) throw new \RuntimeException('La base de datos rechazó la importación; no se guardaron cambios.');
-            $db->transCommit();
-            $message = "Importación terminada: {$inserted} agregados, {$skipped} omitidos por código repetido, " . count($errors) . ' con error.';
-            if ($errors) $message .= ' ' . implode(' ', array_slice($errors, 0, 5));
-            return redirect()->to(base_url('admin/productos'))->with($errors ? 'warning' : 'success', $message);
+            if (!$filas) return $this->jsonResponse(false, 'El archivo no contiene productos para importar.');
+            $conError = count(array_filter($filas, static fn($fila) => !empty($fila['errores'])));
+            return $this->response->setJSON([
+                'respuesta' => true,
+                'mensaje' => $conError ? "Se encontraron {$conError} fila(s) con errores. Corrígelas y vuelve a guardar." : 'Archivo validado. Revisa los productos y guárdalos.',
+                'filas' => $filas,
+                'con_error' => $conError,
+            ]);
         } catch (\Throwable $e) {
-            if (isset($db)) $db->transRollback();
-            return redirect()->to(base_url('admin/productos'))->with('error', $e->getMessage());
+            return $this->jsonResponse(false, $e->getMessage());
         }
+    }
+
+    public function guardarImportacion()
+    {
+        if ($check = $this->requireAdmin(true)) return $check;
+        $productos = json_decode((string) $this->request->getPost('productos'), true);
+        if (!is_array($productos) || !$productos || count($productos) > 5000) {
+            return $this->jsonResponse(false, 'No hay productos válidos para guardar.');
+        }
+
+        $db = db_connect();
+        $filas = [];
+        $codigosVistos = [];
+        $plusVistos = [];
+        foreach ($productos as $i => $raw) {
+            if (!is_array($raw)) $raw = [];
+            [$data, $errores] = $this->validarFilaImportada($raw, $db, $codigosVistos, $plusVistos);
+            $filas[] = ['numero' => $i + 2, 'datos' => $data, 'errores' => $errores];
+        }
+        $conError = count(array_filter($filas, static fn($fila) => !empty($fila['errores'])));
+        if ($conError) {
+            return $this->response->setJSON([
+                'respuesta' => false,
+                'mensaje' => "Aún hay {$conError} fila(s) por corregir. No se guardó ningún producto.",
+                'filas' => $filas,
+                'con_error' => $conError,
+            ]);
+        }
+
+        $db->transBegin();
+        try {
+            foreach ($filas as $fila) {
+                if (!$db->table('productos')->insert($fila['datos'])) {
+                    throw new \RuntimeException('No se pudo guardar el producto de la fila ' . $fila['numero'] . '. No se guardó ningún producto.');
+                }
+            }
+            if ($db->transStatus() === false) throw new \RuntimeException('La base de datos rechazó la importación. No se guardó ningún producto.');
+            $db->transCommit();
+            return $this->jsonResponse(true, count($filas) . ' producto(s) importado(s) correctamente.', ['total' => count($filas)]);
+        } catch (\Throwable $e) {
+            $db->transRollback();
+            return $this->jsonResponse(false, $e->getMessage());
+        }
+    }
+
+    private function validarFilaImportada(array $row, $db, array &$codigosVistos, array &$plusVistos): array
+    {
+        $name = trim((string) ($row['nombre'] ?? ''));
+        $price = str_replace(',', '.', trim((string) ($row['precio'] ?? '')));
+        $stock = str_replace(',', '.', trim((string) ($row['stock'] ?? '0')));
+        $stockMinimo = str_replace(',', '.', trim((string) ($row['stock_minimo'] ?? '0')));
+        $pack = str_replace(',', '.', trim((string) ($row['unidades_por_empaque'] ?? '1')));
+        $barcode = trim((string) ($row['codigo_barras'] ?? ''));
+        $plu = trim((string) ($row['plu'] ?? ''));
+        $department = strtoupper(trim((string) ($row['departamento'] ?? '')));
+        $unit = strtoupper(trim((string) ($row['unidad_base'] ?? '')));
+        $errors = [];
+
+        if ($name === '' || mb_strlen($name) > 150) $errors[] = 'Nombre obligatorio (máximo 150 caracteres).';
+        if (!is_numeric($price) || (float) $price <= 0) $errors[] = 'Precio debe ser mayor que cero.';
+        if (!in_array($department, ['ABARROTES', 'VERDULERIA'], true)) $errors[] = 'Departamento debe ser ABARROTES o VERDULERIA.';
+        if (!in_array($unit, ['PZA', 'KG', 'G', 'L'], true)) $errors[] = 'Unidad debe ser PZA, KG, G o L.';
+        if (!is_numeric($stock) || (float) $stock < 0) $errors[] = 'Existencia debe ser igual o mayor que cero.';
+        if (!is_numeric($stockMinimo) || (float) $stockMinimo < 0) $errors[] = 'Stock mínimo debe ser igual o mayor que cero.';
+        if (!is_numeric($pack) || (float) $pack <= 0) $errors[] = 'Unidades por empaque debe ser mayor que cero.';
+        if (strlen($barcode) > 32) $errors[] = 'Código de barras supera 32 caracteres.';
+        if (strlen($plu) > 8) $errors[] = 'PLU supera 8 caracteres.';
+        if ($barcode !== '') {
+            if (isset($codigosVistos[$barcode])) $errors[] = 'Código de barras repetido dentro del archivo.';
+            elseif ($db->table('productos')->where('codigo_barras', $barcode)->countAllResults() > 0) $errors[] = 'Código de barras ya registrado.';
+            $codigosVistos[$barcode] = true;
+        }
+        if ($plu !== '') {
+            if (isset($plusVistos[$plu])) $errors[] = 'PLU repetido dentro del archivo.';
+            elseif ($db->table('productos')->where('plu', $plu)->countAllResults() > 0) $errors[] = 'PLU ya registrado.';
+            $plusVistos[$plu] = true;
+        }
+
+        return [[
+            'nombre' => mb_substr($name, 0, 150),
+            'descripcion' => trim((string) ($row['descripcion'] ?? '')) ?: null,
+            'categoria' => trim((string) ($row['categoria'] ?? '')) ?: null,
+            'precio' => is_numeric($price) ? (float) $price : 0,
+            'stock' => is_numeric($stock) ? (float) $stock : 0,
+            'stock_minimo' => is_numeric($stockMinimo) ? (float) $stockMinimo : 0,
+            'codigo_barras' => $barcode ?: null,
+            'plu' => $plu ?: null,
+            'departamento' => $department,
+            'unidad_base' => $unit,
+            'unidades_por_empaque' => is_numeric($pack) ? (float) $pack : 1,
+            'activo' => 1,
+        ], array_values(array_unique($errors))];
     }
 
     private function normalizarEncabezado(string $header): string

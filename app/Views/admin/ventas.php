@@ -5,6 +5,44 @@
     <button class="btn btn-primary btn-sm" onclick="abrirNuevaVenta()"><i class="fa-solid fa-plus"></i> Nueva venta a crédito</button>
 </div>
 
+<section class="card" style="margin:14px 0;padding:16px;">
+    <form method="get" action="<?= base_url('admin/ventas') ?>" style="display:flex;align-items:end;gap:10px;flex-wrap:wrap;">
+        <label class="form-group" style="margin:0;"><small>Ver todas las ventas POS de un día</small><input type="date" name="dia" class="admin-input" value="<?= esc($diaSeleccionado ?? '') ?>" required></label>
+        <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-calendar-day"></i> Ver día completo</button>
+        <?php if (!empty($diaSeleccionado)): ?><a class="btn btn-secondary btn-sm" href="<?= base_url('admin/ventas') ?>">Quitar día</a><?php endif; ?>
+    </form>
+</section>
+
+<?php if (!empty($diaSeleccionado)): ?>
+<section class="card" style="margin:0 0 22px;padding:18px;">
+    <h2 style="margin:0 0 14px;">Resumen POS · <?= esc(date('d/m/Y', strtotime($diaSeleccionado))) ?></h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:18px;">
+        <div class="card" style="padding:13px;"><small>Venta total del día</small><strong style="display:block;font-size:23px;">$<?= number_format((float) ($resumenDiaPos->total ?? 0), 2) ?></strong></div>
+        <div class="card" style="padding:13px;"><small>Ventas registradas</small><strong style="display:block;font-size:23px;"><?= (int) ($resumenDiaPos->cantidad_ventas ?? 0) ?></strong></div>
+        <div class="card" style="padding:13px;"><small>Subtotal abarrotes</small><strong style="display:block;font-size:23px;">$<?= number_format((float) ($resumenDiaPos->subtotal_abarrotes ?? 0), 2) ?></strong></div>
+        <div class="card" style="padding:13px;"><small>Subtotal verdulería</small><strong style="display:block;font-size:23px;">$<?= number_format((float) ($resumenDiaPos->subtotal_verduleria ?? 0), 2) ?></strong></div>
+    </div>
+    <h3 style="margin:0 0 8px;">Totales por forma de pago</h3>
+    <div style="overflow:auto;margin-bottom:18px;">
+        <table class="admin-table"><thead><tr><th>Forma de pago</th><th>Ventas</th><th>Abarrotes</th><th>Verdulería</th><th>Total</th></tr></thead><tbody>
+        <?php foreach (($metodosDiaPos ?? []) as $metodo): ?>
+            <tr><td><?= esc($metodo->metodo_pago) ?></td><td><?= (int) $metodo->cantidad_ventas ?></td><td>$<?= number_format((float) $metodo->subtotal_abarrotes, 2) ?></td><td>$<?= number_format((float) $metodo->subtotal_verduleria, 2) ?></td><td><strong>$<?= number_format((float) $metodo->total, 2) ?></strong></td></tr>
+        <?php endforeach; ?>
+        <?php if (empty($metodosDiaPos)): ?><tr><td colspan="5">No hay ventas POS para este día.</td></tr><?php endif; ?>
+        </tbody></table>
+    </div>
+    <h3 style="margin:0 0 8px;">Detalle de ventas del día</h3>
+    <div style="overflow:auto;">
+        <table class="admin-table"><thead><tr><th>Folio / hora</th><th>Productos</th><th>Cliente</th><th>Cajero</th><th>Pago</th><th>Abarrotes</th><th>Verdulería</th><th>Total</th><th>Cambio</th></tr></thead><tbody>
+        <?php foreach (($ventasDiaPos ?? []) as $ventaDia): ?>
+            <tr><td>#<?= (int) $ventaDia->id_venta ?><br><small><?= esc(date('H:i', strtotime($ventaDia->fecha_venta))) ?></small></td><td><?= esc($ventaDia->productos) ?></td><td><?= esc($ventaDia->cliente) ?></td><td><?= esc($ventaDia->cajero) ?></td><td><?= esc($ventaDia->metodo_pago) ?></td><td>$<?= number_format((float) $ventaDia->subtotal_abarrotes, 2) ?></td><td>$<?= number_format((float) $ventaDia->subtotal_verduleria, 2) ?></td><td><strong>$<?= number_format((float) $ventaDia->total, 2) ?></strong></td><td>$<?= number_format((float) $ventaDia->cambio, 2) ?></td></tr>
+        <?php endforeach; ?>
+        <?php if (empty($ventasDiaPos)): ?><tr><td colspan="9">No hay ventas POS para este día.</td></tr><?php endif; ?>
+        </tbody></table>
+    </div>
+</section>
+<?php endif; ?>
+
 <form method="get" action="<?= base_url('admin/ventas') ?>" class="product-filters" style="margin:14px 0 22px">
     <input type="search" name="cliente" class="admin-input" placeholder="Cliente o teléfono" value="<?= esc($filtros['cliente']) ?>" aria-label="Filtrar por cliente o teléfono">
     <label class="form-group" style="margin:0"><small>Desde</small><input type="datetime-local" name="desde" class="admin-input" value="<?= esc($filtros['desde']) ?>"></label>

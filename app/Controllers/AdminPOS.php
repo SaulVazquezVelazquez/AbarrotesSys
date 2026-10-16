@@ -2,6 +2,7 @@
 namespace App\Controllers;
 use App\Models\MPOS;
 use App\Models\MProductos;
+use App\Models\MPagos;
 
 class AdminPOS extends BaseController
 {
@@ -19,10 +20,62 @@ class AdminPOS extends BaseController
             $patron='%'.$normalizado.'%';
             $p=db_connect()->query("SELECT * FROM productos WHERE activo=1 AND (TRANSLATE(LOWER(nombre), 'áéíóúüñ', 'aeiouun') LIKE ? OR codigo_barras ILIKE ?) ORDER BY nombre ASC LIMIT 30",[$patron,'%'.$q.'%'])->getResult();
         }
-        if(!$p && $q==='') $p=db_connect()->table('productos')->where('activo',1)->orderBy('nombre')->limit(200)->get()->getResult();
+        if(!$p && $q==='' && $code==='') $p=db_connect()->table('productos')->where('activo',1)->orderBy('nombre')->limit(200)->get()->getResult();
         if($p && !is_array($p)) $p=[$p];
         return $this->jsonResponse(true,'Consulta lista.',['productos'=>$p]);
     }
+    public function productoRapido()
+    {
+        if ($check = $this->auth()) return $check;
+
+        $barcode = trim((string) $this->request->getPost('codigo_barras'));
+        $name = trim((string) $this->request->getPost('nombre'));
+        $price = $this->request->getPost('precio');
+        $stock = $this->request->getPost('stock');
+        $department = strtoupper(trim((string) $this->request->getPost('departamento')));
+        $unit = strtoupper(trim((string) $this->request->getPost('unidad_base')));
+
+        if ($barcode === '' || strlen($barcode) > 32) return $this->jsonResponse(false, 'El código de barras es obligatorio y debe tener máximo 32 caracteres.');
+        if ($name === '' || mb_strlen($name) > 150) return $this->jsonResponse(false, 'El nombre es obligatorio y debe tener máximo 150 caracteres.');
+        if (!is_numeric($price) || (float) $price <= 0) return $this->jsonResponse(false, 'Indica un precio mayor que cero.');
+        if (!is_numeric($stock) || (float) $stock < 0) return $this->jsonResponse(false, 'Indica una existencia válida, igual o mayor que cero.');
+        if (!in_array($department, ['ABARROTES', 'VERDULERIA'], true) || !in_array($unit, ['PZA', 'KG', 'G', 'L'], true)) {
+            return $this->jsonResponse(false, 'Selecciona un departamento y una unidad válidos.');
+        }
+
+        $db = db_connect();
+        if ($db->table('productos')->where('codigo_barras', $barcode)->countAllResults() > 0) {
+            return $this->jsonResponse(false, 'Ese código ya está registrado. Vuelve a escanearlo para agregar el producto existente.');
+        }
+
+        $productModel = new MProductos();
+        try {
+            $id = $productModel->insert([
+                'nombre' => $name,
+                'descripcion' => trim((string) $this->request->getPost('descripcion')) ?: null,
+                'categoria' => trim((string) $this->request->getPost('categoria')) ?: null,
+                'precio' => (float) $price,
+                'stock' => (float) $stock,
+                'stock_minimo' => 0,
+                'codigo_barras' => $barcode,
+                'departamento' => $department,
+                'unidad_base' => $unit,
+                'unidades_por_empaque' => 1,
+                'activo' => 1,
+            ], true);
+            if (!$id) return $this->jsonResponse(false, 'No se pudo registrar el producto.');
+        } catch (\Throwable $error) {
+            if ($db->table('productos')->where('codigo_barras', $barcode)->countAllResults() > 0) {
+                return $this->jsonResponse(false, 'Ese código ya está registrado. Vuelve a escanearlo para agregar el producto existente.');
+            }
+            return $this->jsonResponse(false, 'No se pudo registrar el producto. Revisa los datos e inténtalo de nuevo.');
+        }
+
+        $product = $db->table('productos')->where('id_producto', $id)->get()->getRow();
+        $this->registrarAuditoria('PRODUCTO_CREAR', 'productos', (int) $id, 'Alta rápida desde el POS: ' . $name);
+        return $this->jsonResponse(true, 'Producto registrado y agregado a la cuenta.', ['producto' => $product]);
+    }
+
     public function cobrar(){ if($c=$this->auth())return $c; $items=json_decode((string)$this->request->getPost('items'),true)??[]; [$ok,$msg,$id]=(new MPOS())->registrarVenta((int)$this->session->get('id_usuario'),$items,(string)$this->request->getPost('metodo_pago'),$this->request->getPost('id_cliente')?(int)$this->request->getPost('id_cliente'):null,(string)$this->request->getPost('recibido'),json_decode((string)$this->request->getPost('pagos'),true)??[]); if($ok)$this->registrarAuditoria('POS_VENTA','pos_ventas',$id,$msg); return $this->jsonResponse($ok,$msg,['id_venta'=>$id]); }
     public function ticket(int $idVenta)
     {
@@ -113,57 +166,45 @@ class AdminPOS extends BaseController
         if ($check = $this->auth()) return $check;
 
         $id = (int) $this->request->getPost('id_cliente');
-        $monto = (float) $this->request->getPost('monto');
-        if ($id <= 0 || $monto <= 0) return $this->jsonResponse(false, 'Selecciona un cliente e indica un monto válido.');
+        $montoRaw = $this->request->getPost('monto');
+        $metodo = (string) ($this->request->getPost('metodo_pago') ?: 'EFECTIVO');
+        if ($id <= 0 || !is_numeric($montoRaw) || (float) $montoRaw <= 0) {
+            return $this->jsonResponse(false, 'Selecciona un cliente e indica un monto válido.');
+        }
+        if (!in_array($metodo, ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA'], true)) {
+            return $this->jsonResponse(false, 'Forma de pago inválida.');
+        }
 
-        $db = db_connect();
-        $db->transBegin();
+        $monto = round((float) $montoRaw, 2);
+        $cliente = $this->db->query('SELECT id_cliente FROM clientes WHERE id_cliente = ?', [$id])->getRow();
+        if (!$cliente) return $this->jsonResponse(false, 'Cliente no encontrado.');
+
+        $pendiente = (float) $this->db->query(
+            "SELECT COALESCE(SUM(saldo_pendiente), 0) AS total FROM ventas WHERE id_cliente = ? AND estatus IN ('PENDIENTE','PARCIAL','VENCIDA')",
+            [$id]
+        )->getRow()->total;
+        if ($pendiente <= 0) return $this->jsonResponse(false, 'El cliente no tiene saldo pendiente.');
+        if ($monto > $pendiente + 0.001) return $this->jsonResponse(false, 'El abono supera el saldo pendiente de $' . number_format($pendiente, 2) . '.');
+
         try {
-            $cliente = $db->query('SELECT * FROM clientes WHERE id_cliente = ? FOR UPDATE', [$id])->getRow();
-            if (!$cliente) throw new \RuntimeException('Cliente no encontrado.');
-
-            $pendiente = (float) $db->query(
-                "SELECT COALESCE(SUM(saldo_pendiente), 0) AS total FROM ventas WHERE id_cliente = ? AND estatus IN ('PENDIENTE','PARCIAL','VENCIDA')",
-                [$id]
-            )->getRow()->total;
-            if ($monto > $pendiente) throw new \RuntimeException('El abono supera el saldo pendiente.');
-
-            $metodo = (string) ($this->request->getPost('metodo_pago') ?: 'EFECTIVO');
-            if (!in_array($metodo, ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA'], true)) {
-                throw new \RuntimeException('Forma de pago inválida.');
-            }
-
-            $db->query('INSERT INTO pagos_abonos (id_cliente, monto, metodo_pago, id_usuario) VALUES (?, ?, ?, ?)', [
-                $id, $monto, $metodo, $this->session->get('id_usuario'),
-            ]);
-            $pagoId = (int) $db->insertID();
-            $restante = $monto;
-            $ventas = $db->query(
-                "SELECT * FROM ventas WHERE id_cliente = ? AND saldo_pendiente > 0 AND estatus IN ('PENDIENTE','PARCIAL','VENCIDA') ORDER BY fecha_venta FOR UPDATE",
-                [$id]
-            )->getResult();
-
-            foreach ($ventas as $venta) {
-                $aplicado = min($restante, (float) $venta->saldo_pendiente);
-                $nuevoSaldo = (float) $venta->saldo_pendiente - $aplicado;
-                $db->query('UPDATE ventas SET saldo_pendiente = ?, estatus = ? WHERE id_venta = ?', [
-                    $nuevoSaldo, $nuevoSaldo <= 0 ? 'PAGADA' : 'PARCIAL', $venta->id_venta,
-                ]);
-                $restante -= $aplicado;
-                if ($restante <= 0) break;
-            }
-
-            if (!$db->transStatus()) throw new \RuntimeException('No se pudo guardar el abono.');
-            $db->transCommit();
+            [$ok, $msg, $pagoId] = (new MPagos())->registrarAbono(
+                $id,
+                $monto,
+                $metodo,
+                null,
+                (int) $this->session->get('id_usuario')
+            );
+            if (!$ok) return $this->jsonResponse(false, $msg);
+            $this->registrarAuditoria('REGISTRAR_ABONO', 'pagos_abonos', $pagoId, 'Abono POS a cliente #' . $id . ' - $' . number_format($monto, 2));
             return $this->jsonResponse(true, 'Abono registrado.', [
                 'id_pago' => $pagoId,
                 'saldo_anterior' => $pendiente,
                 'monto' => $monto,
-                'saldo_nuevo' => $pendiente - $monto,
+                'saldo_nuevo' => max(0, round($pendiente - $monto, 2)),
             ]);
         } catch (\Throwable $error) {
-            $db->transRollback();
-            return $this->jsonResponse(false, $error->getMessage());
+            log_message('error', 'AdminPOS::abono: ' . $error->getMessage());
+            return $this->jsonResponse(false, 'No se pudo registrar el abono. Revisa el método de pago y vuelve a intentarlo.');
         }
     }
     public function corte()
@@ -173,10 +214,14 @@ class AdminPOS extends BaseController
         if (!is_numeric($real) || (float) $real < 0) return $this->jsonResponse(false, 'El efectivo contado debe ser un monto válido y no negativo.');
         $real = (float) $real;
         $db = db_connect();
+        // Supabase guarda estos TIMESTAMP sin zona como hora UTC; el corte sigue el día local de la tienda.
+        $diaLocal = date('Y-m-d');
+        $inicioUtc = "((?::date::timestamp AT TIME ZONE 'America/Mexico_City') AT TIME ZONE 'UTC')";
+        $finUtc = "(((?::date + 1)::timestamp AT TIME ZONE 'America/Mexico_City') AT TIME ZONE 'UTC')";
         // Agrega cada pedido web primero por folio para no multiplicar su total por el número de renglones.
-        $web = $db->query("WITH pedidos AS (SELECT v.id_venta, v.total, COALESCE(SUM(d.subtotal) FILTER (WHERE COALESCE(p.departamento, 'ABARROTES') = 'ABARROTES'), 0) AS abarrotes, COALESCE(SUM(d.subtotal) FILTER (WHERE p.departamento = 'VERDULERIA'), 0) AS verduleria FROM ventas v LEFT JOIN detalle_venta d ON d.id_venta = v.id_venta LEFT JOIN productos p ON p.id_producto = d.id_producto WHERE DATE(v.fecha_venta) = CURRENT_DATE AND v.pickup_at IS NOT NULL AND v.estatus <> 'CANCELADA' GROUP BY v.id_venta, v.total) SELECT COALESCE(SUM(total),0) AS total, COALESCE(SUM(abarrotes),0) AS abarrotes, COALESCE(SUM(verduleria),0) AS verduleria FROM pedidos")->getRow();
-        $r = $db->query("SELECT COALESCE(SUM(total),0) + ? AS total, COALESCE(SUM(subtotal_abarrotes),0) + ? AS abarrotes, COALESCE(SUM(subtotal_verduleria),0) + ? AS verduleria FROM pos_ventas WHERE DATE(fecha_venta)=CURRENT_DATE", [$web->total, $web->abarrotes, $web->verduleria])->getRow();
-        $pagos = $db->query("SELECT pp.metodo,COALESCE(SUM(pp.monto),0) monto FROM pos_pagos pp JOIN pos_ventas v USING(id_venta) WHERE DATE(v.fecha_venta)=CURRENT_DATE GROUP BY pp.metodo ORDER BY pp.metodo")->getResultArray();
+        $web = $db->query("WITH pedidos AS (SELECT v.id_venta, v.total, COALESCE(SUM(d.subtotal) FILTER (WHERE COALESCE(p.departamento, 'ABARROTES') = 'ABARROTES'), 0) AS abarrotes, COALESCE(SUM(d.subtotal) FILTER (WHERE p.departamento = 'VERDULERIA'), 0) AS verduleria FROM ventas v LEFT JOIN detalle_venta d ON d.id_venta = v.id_venta LEFT JOIN productos p ON p.id_producto = d.id_producto WHERE v.fecha_venta >= $inicioUtc AND v.fecha_venta < $finUtc AND v.pickup_at IS NOT NULL AND v.estatus <> 'CANCELADA' GROUP BY v.id_venta, v.total) SELECT COALESCE(SUM(total),0) AS total, COALESCE(SUM(abarrotes),0) AS abarrotes, COALESCE(SUM(verduleria),0) AS verduleria FROM pedidos", [$diaLocal, $diaLocal])->getRow();
+        $r = $db->query("SELECT COALESCE(SUM(total),0) + ? AS total, COALESCE(SUM(subtotal_abarrotes),0) + ? AS abarrotes, COALESCE(SUM(subtotal_verduleria),0) + ? AS verduleria FROM pos_ventas WHERE fecha_venta >= $inicioUtc AND fecha_venta < $finUtc", [$web->total, $web->abarrotes, $web->verduleria, $diaLocal, $diaLocal])->getRow();
+        $pagos = $db->query("SELECT pp.metodo,COALESCE(SUM(pp.monto),0) monto FROM pos_pagos pp JOIN pos_ventas v USING(id_venta) WHERE v.fecha_venta >= $inicioUtc AND v.fecha_venta < $finUtc GROUP BY pp.metodo ORDER BY pp.metodo", [$diaLocal, $diaLocal])->getResultArray();
         if ((float) $web->total > 0) $pagos[] = ['metodo' => 'CREDITO', 'monto' => (float) $web->total];
         $efectivo = 0.0;
         foreach ($pagos as $pago) if ($pago['metodo'] === 'EFECTIVO') $efectivo = (float) $pago['monto'];

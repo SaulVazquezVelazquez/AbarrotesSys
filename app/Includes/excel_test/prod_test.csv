@@ -1,0 +1,4 @@
+nombre,descripcion,categoria,precio,stock,stock_minimo,codigo_barras,plu,departamento,unidad_base,unidades_por_empaque
+Jabon de tocador, Jabón de tocador en barra, Aseo personal, 15.00, 50, 10, 7501000000029,,HIGIENE,PZA,24
+Papas fritas, Papas fritas sabor original, Abarrotes, 20.00, 30, 5, 7501000000036,,BOTANAS,PZA,10
+leche 1 L,Leche pasteurizada,cereales,18.00,40,8,7501000000043,,ABARROTES,PZA,12

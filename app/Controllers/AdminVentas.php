@@ -28,6 +28,13 @@ class AdminVentas extends BaseController
         $data['nombre_completo'] = $this->session->get('nombre_completo');
         $data['rol']             = $this->session->get('rol');
         $data['productos']       = $this->ModeloProductos->getActivos();
+        $dia = trim((string) $this->request->getGet('dia'));
+        if (!$this->fechaDiaValida($dia)) $dia = '';
+        $data['diaSeleccionado'] = $dia;
+        $data['resumenDiaPos'] = $dia !== '' ? $this->getResumenDiaPos($dia) : null;
+        $data['metodosDiaPos'] = $dia !== '' ? $this->getMetodosDiaPos($dia) : [];
+        $data['ventasDiaPos'] = $dia !== '' ? $this->getVentasDiaPos($dia) : [];
+
         $data['filtros'] = [
             'cliente' => trim((string) $this->request->getGet('cliente')),
             'desde' => trim((string) $this->request->getGet('desde')),
@@ -45,6 +52,61 @@ class AdminVentas extends BaseController
         return view('admin/ventas', $data);
     }
 
+    private function fechaDiaValida(string $value): bool
+    {
+        if ($value === '') return false;
+        $fecha = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        $errores = \DateTimeImmutable::getLastErrors();
+        return $fecha !== false && $fecha->format('Y-m-d') === $value && (!$errores || ($errores['warning_count'] === 0 && $errores['error_count'] === 0));
+    }
+
+    private function getResumenDiaPos(string $dia): object
+    {
+        return $this->db->query(
+            'SELECT COUNT(*) AS cantidad_ventas, COALESCE(SUM(total), 0) AS total,
+                    COALESCE(SUM(subtotal_abarrotes), 0) AS subtotal_abarrotes,
+                    COALESCE(SUM(subtotal_verduleria), 0) AS subtotal_verduleria
+             FROM pos_ventas WHERE fecha_venta >= ((?::date::timestamp AT TIME ZONE \'America/Mexico_City\') AT TIME ZONE \'UTC\')
+               AND fecha_venta < (((?::date + 1)::timestamp AT TIME ZONE \'America/Mexico_City\') AT TIME ZONE \'UTC\')',
+            [$dia, $dia]
+        )->getRow();
+    }
+
+    private function getMetodosDiaPos(string $dia): array
+    {
+        return $this->db->query(
+            'SELECT metodo_pago, COUNT(*) AS cantidad_ventas, COALESCE(SUM(total), 0) AS total,
+                    COALESCE(SUM(subtotal_abarrotes), 0) AS subtotal_abarrotes,
+                    COALESCE(SUM(subtotal_verduleria), 0) AS subtotal_verduleria
+             FROM pos_ventas WHERE fecha_venta >= ((?::date::timestamp AT TIME ZONE \'America/Mexico_City\') AT TIME ZONE \'UTC\')
+               AND fecha_venta < (((?::date + 1)::timestamp AT TIME ZONE \'America/Mexico_City\') AT TIME ZONE \'UTC\')
+             GROUP BY metodo_pago ORDER BY metodo_pago',
+            [$dia, $dia]
+        )->getResult();
+    }
+
+    private function getVentasDiaPos(string $dia): array
+    {
+        return $this->db->query(
+            "SELECT pv.id_venta, (pv.fecha_venta AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City') AS fecha_venta, pv.total, pv.subtotal_abarrotes, pv.subtotal_verduleria,
+                    pv.metodo_pago, pv.efectivo_recibido, pv.cambio,
+                    COALESCE(u.nombre_completo, '—') AS cajero,
+                    COALESCE(c.nombre_completo, 'Venta mostrador') AS cliente,
+                    COALESCE(string_agg(p.nombre || ' × ' || pd.cantidad, ', ' ORDER BY p.nombre), '—') AS productos
+             FROM pos_ventas pv
+             LEFT JOIN usuarios u ON u.id_usuario = pv.id_usuario
+             LEFT JOIN clientes c ON c.id_cliente = pv.id_cliente
+             LEFT JOIN pos_detalle pd ON pd.id_venta = pv.id_venta
+             LEFT JOIN productos p ON p.id_producto = pd.id_producto
+             WHERE pv.fecha_venta >= ((?::date::timestamp AT TIME ZONE 'America/Mexico_City') AT TIME ZONE 'UTC')
+               AND pv.fecha_venta < (((?::date + 1)::timestamp AT TIME ZONE 'America/Mexico_City') AT TIME ZONE 'UTC')
+             GROUP BY pv.id_venta, pv.fecha_venta, pv.total, pv.subtotal_abarrotes, pv.subtotal_verduleria,
+                      pv.metodo_pago, pv.efectivo_recibido, pv.cambio, u.nombre_completo, c.nombre_completo
+             ORDER BY pv.fecha_venta DESC, pv.id_venta DESC",
+            [$dia, $dia]
+        )->getResult();
+    }
+
     private function fechaHoraValida(string $value): bool
     {
         $fecha = \DateTimeImmutable::createFromFormat('!Y-m-d\\TH:i', $value);
@@ -54,7 +116,7 @@ class AdminVentas extends BaseController
 
     private function getVentasMostradorFiltradas(array $filtros): array
     {
-        $sql = "SELECT pv.id_venta, pv.fecha_venta, pv.total, pv.metodo_pago, pv.efectivo_recibido, pv.cambio,
+        $sql = "SELECT pv.id_venta, (pv.fecha_venta AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City') AS fecha_venta, pv.total, pv.metodo_pago, pv.efectivo_recibido, pv.cambio,
                        COALESCE(u.nombre_completo, '—') AS cajero,
                        COALESCE(c.nombre_completo, 'Venta mostrador') AS cliente,
                        COALESCE(string_agg(p.nombre || ' × ' || pd.cantidad, ', ' ORDER BY p.nombre), '—') AS productos
@@ -65,8 +127,8 @@ class AdminVentas extends BaseController
                 WHERE pv.metodo_pago <> 'CREDITO'";
         $params = [];
         if ($filtros['cliente'] !== '') { $sql .= ' AND (COALESCE(c.nombre_completo, \'Venta mostrador\') ILIKE ? OR COALESCE(c.telefono, \'\') ILIKE ?)'; $params[] = '%' . $filtros['cliente'] . '%'; $params[] = '%' . $filtros['cliente'] . '%'; }
-        if ($filtros['desde'] !== '') { $sql .= ' AND pv.fecha_venta >= ?'; $params[] = str_replace('T', ' ', $filtros['desde']); }
-        if ($filtros['hasta'] !== '') { $sql .= ' AND pv.fecha_venta <= ?'; $params[] = str_replace('T', ' ', $filtros['hasta']); }
+        if ($filtros['desde'] !== '') { $sql .= " AND pv.fecha_venta >= ((?::timestamp AT TIME ZONE 'America/Mexico_City') AT TIME ZONE 'UTC')"; $params[] = str_replace('T', ' ', $filtros['desde']); }
+        if ($filtros['hasta'] !== '') { $sql .= " AND pv.fecha_venta <= ((?::timestamp AT TIME ZONE 'America/Mexico_City') AT TIME ZONE 'UTC')"; $params[] = str_replace('T', ' ', $filtros['hasta']); }
         if ($filtros['metodo_pago'] !== '' && $filtros['metodo_pago'] !== 'CREDITO') { $sql .= ' AND pv.metodo_pago = ?'; $params[] = $filtros['metodo_pago']; }
         if ($filtros['metodo_pago'] === 'CREDITO') return [];
         $sql .= ' GROUP BY pv.id_venta, pv.fecha_venta, pv.total, pv.metodo_pago, pv.efectivo_recibido, pv.cambio, u.nombre_completo, c.nombre_completo ORDER BY pv.fecha_venta DESC LIMIT 500';
