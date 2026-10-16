@@ -3,7 +3,9 @@
 El proyecto está preparado como servicio Docker de CodeIgniter 4, PHP 8.2,
 Apache y PostgreSQL. El Blueprint `render.yaml` crea el servicio web, conecta
 PostgreSQL mediante `DATABASE_URL`, genera una clave privada para cifrado y
-comprueba la disponibilidad en `/healthz`.
+comprueba la disponibilidad en `/healthz`. Si se configura
+`SUPABASE_DATABASE_URL`, la aplicación usa esa URL con prioridad sobre la base
+de Render.
 
 ## 1. Subir el código a GitHub
 
@@ -19,22 +21,28 @@ No publiques credenciales ni datos personales de clientes dentro del repositorio
 
 1. En Render, crea un **Blueprint** y conecta el repositorio y rama que subiste.
 2. Revisa los recursos descritos en `render.yaml` y confirma su creación.
-3. Espera a que PostgreSQL y el servicio web queden listos. La variable interna
-   `DATABASE_URL` queda enlazada automáticamente y `ENCRYPTION_KEY` se genera
-   sin guardar su valor en Git.
+3. Si quieres usar Supabase, agrega `SUPABASE_DATABASE_URL` en **Environment**
+   del servicio web de Render y pega ahí la cadena de conexión PostgreSQL de
+   Supabase con SSL requerido. No la agregues al repositorio ni a `render.yaml`.
+   La app prioriza esta variable sobre `DATABASE_URL`, que el Blueprint enlaza
+   a la base PostgreSQL de Render. `ENCRYPTION_KEY` se genera automáticamente.
 4. Revisa **Events** y **Logs** si el despliegue no queda listo. El endpoint
    `/healthz` verifica que la aplicación pueda consultar PostgreSQL.
 
 ## 3. Crear el esquema en una base nueva
 
-Usa la URL **externa** de PostgreSQL que muestra Render desde una terminal de tu
-computadora. No la guardes en Git ni la pegues en mensajes. Desde la raíz del
-proyecto, exporta la variable y ejecuta el instalador:
+Usa la URL externa de PostgreSQL de la base que elegiste (Render o Supabase)
+desde una terminal de tu computadora. No la guardes en Git ni la pegues en
+mensajes. Desde la raíz del proyecto, exporta la variable correspondiente y
+ejecuta el instalador:
 
 ```sh
-export DATABASE_URL='postgresql://USUARIO:CONTRASENA@HOST:5432/BASE?sslmode=require'
+export SUPABASE_DATABASE_URL='postgresql://USUARIO:CONTRASENA@HOST:5432/BASE?sslmode=require'
 sh app/Database/setup_render.sh
 ```
+
+Para instalar el esquema en PostgreSQL de Render, puedes exportar
+`DATABASE_URL` en su lugar.
 
 El script aplica el esquema base, clientes y crédito, catálogo, mejoras
 operativas y tablas del POS. No carga productos de demostración. Si quieres

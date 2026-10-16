@@ -14,8 +14,9 @@ class Database extends Config
     {
         parent::__construct();
 
-        // Si existe DATABASE_URL (Render u otra plataforma en la nube), se usa esa.
-        $databaseUrl = getenv('DATABASE_URL') ?: ($_ENV['DATABASE_URL'] ?? null);
+        // Permite preferir Supabase aunque Render también inyecte DATABASE_URL para su PostgreSQL.
+        $databaseUrl = getenv('SUPABASE_DATABASE_URL') ?: ($_ENV['SUPABASE_DATABASE_URL'] ?? null);
+        $databaseUrl = $databaseUrl ?: (getenv('DATABASE_URL') ?: ($_ENV['DATABASE_URL'] ?? null));
 
         if (!empty($databaseUrl)) {
             $params = parse_url($databaseUrl);

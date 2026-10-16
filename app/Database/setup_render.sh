@@ -1,8 +1,9 @@
 #!/bin/sh
 set -eu
 
-if [ -z "${DATABASE_URL:-}" ]; then
-  echo "Define DATABASE_URL con la URL externa de PostgreSQL de Render antes de continuar." >&2
+DB_URL="${SUPABASE_DATABASE_URL:-${DATABASE_URL:-}}"
+if [ -z "$DB_URL" ]; then
+  echo "Define SUPABASE_DATABASE_URL o DATABASE_URL con la URL de PostgreSQL antes de continuar." >&2
   exit 1
 fi
 
@@ -16,7 +17,7 @@ for script in \
   tienda_barrio.sql
 do
   echo "Aplicando ${script}..."
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$SCRIPT_DIR/$script"
+  psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SCRIPT_DIR/$script"
 done
 
 echo "Esquema de Tienda y Abarrotes aplicado correctamente."
