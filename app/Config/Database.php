@@ -14,8 +14,12 @@ class Database extends Config
     {
         parent::__construct();
 
-        // Permite preferir Supabase aunque Render también inyecte DATABASE_URL para su PostgreSQL.
+        // En producción la base elegida es Supabase; no caer silenciosamente en la URL
+        // de PostgreSQL que Render inyecta como DATABASE_URL.
         $databaseUrl = getenv('SUPABASE_DATABASE_URL') ?: ($_ENV['SUPABASE_DATABASE_URL'] ?? null);
+        if (ENVIRONMENT === 'production' && empty($databaseUrl)) {
+            throw new \RuntimeException('Falta configurar SUPABASE_DATABASE_URL en el entorno de producción.');
+        }
         $databaseUrl = $databaseUrl ?: (getenv('DATABASE_URL') ?: ($_ENV['DATABASE_URL'] ?? null));
 
         if (!empty($databaseUrl)) {

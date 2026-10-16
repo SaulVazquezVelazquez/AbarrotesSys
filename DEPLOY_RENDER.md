@@ -3,9 +3,9 @@
 El proyecto está preparado como servicio Docker de CodeIgniter 4, PHP 8.2,
 Apache y PostgreSQL. El Blueprint `render.yaml` crea el servicio web, conecta
 PostgreSQL mediante `DATABASE_URL`, genera una clave privada para cifrado y
-comprueba la disponibilidad en `/healthz`. Si se configura
-`SUPABASE_DATABASE_URL`, la aplicación usa esa URL con prioridad sobre la base
-de Render.
+comprueba la disponibilidad en `/healthz`. En producción,
+`SUPABASE_DATABASE_URL` es obligatoria; la aplicación no usa como respaldo la
+URL de PostgreSQL que Render inyecta automáticamente.
 
 ## 1. Subir el código a GitHub
 
@@ -21,11 +21,12 @@ No publiques credenciales ni datos personales de clientes dentro del repositorio
 
 1. En Render, crea un **Blueprint** y conecta el repositorio y rama que subiste.
 2. Revisa los recursos descritos en `render.yaml` y confirma su creación.
-3. Si quieres usar Supabase, agrega `SUPABASE_DATABASE_URL` en **Environment**
+3. Agrega `SUPABASE_DATABASE_URL` en **Environment**
    del servicio web de Render y pega ahí la cadena de conexión PostgreSQL de
    Supabase con SSL requerido. No la agregues al repositorio ni a `render.yaml`.
    La app prioriza esta variable sobre `DATABASE_URL`, que el Blueprint enlaza
-   a la base PostgreSQL de Render. `ENCRYPTION_KEY` se genera automáticamente.
+   a la base PostgreSQL de Render, pero la app no la usa en producción.
+   `ENCRYPTION_KEY` se genera automáticamente.
 4. Revisa **Events** y **Logs** si el despliegue no queda listo. El endpoint
    `/healthz` verifica que la aplicación pueda consultar PostgreSQL.
 

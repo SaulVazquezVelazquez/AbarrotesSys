@@ -7,6 +7,7 @@ use App\Models\MProductos;
 class AdminProductos extends BaseController
 {
     protected MProductos $Modelo;
+    private ?array $categoriasExistentesImportacion = null;
 
     function __construct()
     {
@@ -140,18 +141,21 @@ class AdminProductos extends BaseController
     private function validarFilaImportada(array $row, $db, array &$codigosVistos, array &$plusVistos): array
     {
         $name = trim((string) ($row['nombre'] ?? ''));
-        $price = str_replace(',', '.', trim((string) ($row['precio'] ?? '')));
+        $price = $this->normalizarPrecioImportado((string) ($row['precio'] ?? ''));
         $stock = str_replace(',', '.', trim((string) ($row['stock'] ?? '0')));
         $stockMinimo = str_replace(',', '.', trim((string) ($row['stock_minimo'] ?? '0')));
         $pack = str_replace(',', '.', trim((string) ($row['unidades_por_empaque'] ?? '1')));
         $barcode = trim((string) ($row['codigo_barras'] ?? ''));
         $plu = trim((string) ($row['plu'] ?? ''));
-        $department = strtoupper(trim((string) ($row['departamento'] ?? '')));
+        $department = mb_strtoupper(trim((string) ($row['departamento'] ?? '')));
+        $department = str_replace('Í', 'I', $department);
         $unit = strtoupper(trim((string) ($row['unidad_base'] ?? '')));
+        $categoryInput = trim((string) ($row['categoria'] ?? ''));
+        $category = $this->coincidenciaCategoria($categoryInput, $db);
         $errors = [];
 
         if ($name === '' || mb_strlen($name) > 150) $errors[] = 'Nombre obligatorio (máximo 150 caracteres).';
-        if (!is_numeric($price) || (float) $price <= 0) $errors[] = 'Precio debe ser mayor que cero.';
+        if ($price === null || $price <= 0) $errors[] = 'Precio debe ser mayor que cero. Usa un importe válido en pesos mexicanos.';
         if (!in_array($department, ['ABARROTES', 'VERDULERIA'], true)) $errors[] = 'Departamento debe ser ABARROTES o VERDULERIA.';
         if (!in_array($unit, ['PZA', 'KG', 'G', 'L'], true)) $errors[] = 'Unidad debe ser PZA, KG, G o L.';
         if (!is_numeric($stock) || (float) $stock < 0) $errors[] = 'Existencia debe ser igual o mayor que cero.';
@@ -173,8 +177,8 @@ class AdminProductos extends BaseController
         return [[
             'nombre' => mb_substr($name, 0, 150),
             'descripcion' => trim((string) ($row['descripcion'] ?? '')) ?: null,
-            'categoria' => trim((string) ($row['categoria'] ?? '')) ?: null,
-            'precio' => is_numeric($price) ? (float) $price : 0,
+            'categoria' => $category ?: null,
+            'precio' => $price ?? 0,
             'stock' => is_numeric($stock) ? (float) $stock : 0,
             'stock_minimo' => is_numeric($stockMinimo) ? (float) $stockMinimo : 0,
             'codigo_barras' => $barcode ?: null,
@@ -184,6 +188,66 @@ class AdminProductos extends BaseController
             'unidades_por_empaque' => is_numeric($pack) ? (float) $pack : 1,
             'activo' => 1,
         ], array_values(array_unique($errors))];
+    }
+
+    private function normalizarPrecioImportado(string $valor): ?float
+    {
+        $valor = trim(str_replace(["\u{00A0}", "\u{202F}"], ' ', $valor));
+        if ($valor === '') return null;
+
+        $valor = preg_replace('/(?:MXN|MX\$|M\.?N\.?|PESOS?)/iu', '', $valor) ?? '';
+        $valor = str_replace(['$', ' ', "\t", "\r", "\n"], '', $valor);
+        if ($valor === '' || !preg_match('/^[+-]?[0-9.,]+$/', $valor)) return null;
+
+        $signo = '';
+        if ($valor[0] === '-' || $valor[0] === '+') {
+            $signo = $valor[0] === '-' ? '-' : '';
+            $valor = substr($valor, 1);
+        }
+        if ($valor === '' || !preg_match('/\d/', $valor)) return null;
+
+        $ultimaComa = strrpos($valor, ',');
+        $ultimoPunto = strrpos($valor, '.');
+        if ($ultimaComa !== false && $ultimoPunto !== false) {
+            $decimal = $ultimaComa > $ultimoPunto ? ',' : '.';
+            $miles = $decimal === ',' ? '.' : ',';
+            $valor = str_replace($miles, '', $valor);
+            $valor = str_replace($decimal, '.', $valor);
+        } elseif ($ultimaComa !== false || $ultimoPunto !== false) {
+            $separador = $ultimaComa !== false ? ',' : '.';
+            $partes = explode($separador, $valor);
+            $decimales = strlen((string) end($partes));
+            $gruposDeMiles = count($partes) > 1 && strlen($partes[0]) >= 1 && strlen($partes[0]) <= 3;
+            foreach (array_slice($partes, 1) as $grupo) $gruposDeMiles = $gruposDeMiles && strlen($grupo) === 3;
+            if ($gruposDeMiles && $decimales === 3) {
+                $valor = implode('', $partes);
+            } elseif (count($partes) > 2) {
+                $fraccion = array_pop($partes);
+                $valor = implode('', $partes) . '.' . $fraccion;
+            } else {
+                $valor = str_replace($separador, '.', $valor);
+            }
+        }
+
+        if (!is_numeric($valor)) return null;
+        return round((float) ($signo . $valor), 2);
+    }
+
+    private function coincidenciaCategoria(string $categoria, $db): string
+    {
+        if ($categoria === '') return '';
+        if ($this->categoriasExistentesImportacion === null) {
+            $this->categoriasExistentesImportacion = array_values(array_filter(array_map(
+                static fn($fila) => trim((string) $fila['categoria']),
+                $db->query('SELECT DISTINCT categoria FROM productos WHERE categoria IS NOT NULL AND trim(categoria) <> \'\'')->getResultArray()
+            ), static fn($valor) => $valor !== ''));
+        }
+
+        $buscada = mb_strtolower($categoria, 'UTF-8');
+        foreach ($this->categoriasExistentesImportacion as $existente) {
+            if (mb_strtolower($existente, 'UTF-8') === $buscada) return $existente;
+        }
+        return $categoria;
     }
 
     private function normalizarEncabezado(string $header): string
